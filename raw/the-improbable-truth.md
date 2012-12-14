@@ -1,0 +1,61 @@
+Date: 2012-12-13
+Title: The "Improbable" Truth: Rare Browser Bugs
+Tags: browser,javascript
+Slug: improbable-truth-rare-browser-bugs
+
+Over the last two weeks at [Disqus](http://disqus.com) we discovered two 
+annoying browser bugs. Both were only happening on iOS, which reminded me the 
+famous quote from [Sherlock Holmes](http://en.wikipedia.org/wiki/Sherlock_holmes):
+ "when you have eliminated the impossible, whatever remains, however improbable, 
+must be the truth".
+
+The first one was a bad one. We had reports from users not being able to login
+to our system from the embedded commenting widget, but only on iOS. The
+symptoms were even stranger:
+
+  - Users were shown the login page in a popup
+  - Users could login and the cookie was set
+  - The popup stayed open but notified the embed about the logged in user
+  - The embed did not recognize the logged in user until after a refresh
+
+We started debugging and discovered that the embed actually makes a call to
+get details of the logged in user after it gets the notification from the
+popup. However, the result of the request was never processed. Moreso, if you
+refreshed the popup and then closed it, it worked!
+
+We spent many hours in the iPhone emulator, mostly due to the cumbersome nature
+ of all the emulators, we discovered that if you ever opened a popup and held a
+ reference to it, iOS suspends the events on the parent page but still executes
+ some of the code. So, in our case, the XHR call was being made and the
+response was receieved, but the callback was not called. The cause of our bug
+reports was this callback being responsible for closing the login popup. The
+embed was dead-locked for waiting for the request to finish to close the popup
+and the browser was waiting for the popup to close to fire the callback. As you
+ can imagine, there were no visible reports of this behavior, anywhere on the
+internets.
+
+The other one was even weirder: we were seeing a certain content being repeated
+exactly three times whereas it should have appended to the DOM only once. The
+intermittent nature of the problem suggested a hard-to-track race condition but
+ that turned out not to be the case. We were able to mitigate the problem
+easily by emptying the parent element before appending the content. This was
+only a symptomatic cure though so we proceeded on our adventure to find the root
+cause.
+
+After many hours of debugging, which was also very cumbersome due to the
+specific "ritual" to reproduce it consistently, we traced the problem to the
+XHR success callback getting called 3 times with `readyState == 4` instead of
+only once. The new information suggested, surprise, a race condition, but
+tracking the number of XHR objects eliminated that possibility entirely.
+
+It turns out that the `onreadystatechange` event was getting fired even though
+`readyState` did not change at all. Not surprisingly, since this was happening
+at the **completed** state, the callback was fired multiple times for the same
+request. A Google search revealed another poor soul who encountered the same
+issue: 
+[https://github.com/madrobby/zepto/pull/633](https://github.com/madrobby/zepto/pull/633)
+
+There it was: a weird, hard-to-reproduce browser bug breaking our product
+randomly. After realizing this fact, we went ahead and did what we had to do:
+[patched Reqwest](https://github.com/ded/reqwest/pull/93), the XHR library we
+use at Disqus.

@@ -3,7 +3,7 @@
     <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="utf-8">
-        <title>Hello World!</title>
+        <title>The "Improbable" Truth: Rare Browser Bugs</title>
         <meta charset="utf-8" />
         <link href='http://fonts.googleapis.com/css?family=ABeeZee|Carrois+Gothic|Source+Code+Pro:400,700' rel='stylesheet' type='text/css'>
         <link rel="stylesheet" href="./theme/style/reset.css" type="text/css" />
@@ -39,11 +39,11 @@ A place where you probably will read things only about programming
         
 <article>
     <header>
-        <h2><a href="hello.html" rel="bookmark">
-    Hello World!
+        <h2><a href="improbable-truth-rare-browser-bugs.html" rel="bookmark">
+    The "Improbable" Truth: Rare Browser Bugs
 </a></h2>
-<time datetime="2012-10-21 00:00:00" pubdate>Posted on
-    Sun 21 October 2012
+<time datetime="2012-12-13 00:00:00" pubdate>Posted on
+    Thu 13 December 2012
 </time>
 
 <address class="vcard author">
@@ -55,14 +55,66 @@ A place where you probably will read things only about programming
     </header>
 
     <div class="body">
-        <p>The very first post via Pelican!</p>
+        <p>Over the last two weeks at <a href="http://disqus.com">Disqus</a> we discovered two 
+annoying browser bugs. Both were only happening on iOS, which reminded me the 
+famous quote from <a href="http://en.wikipedia.org/wiki/Sherlock_holmes">Sherlock Holmes</a>:
+ "when you have eliminated the impossible, whatever remains, however improbable, 
+must be the truth".</p>
+<p>The first one was a bad one. We had reports from users not being able to login
+to our system from the embedded commenting widget, but only on iOS. The
+symptoms were even stranger:</p>
+<ul>
+<li>Users were shown the login page in a popup</li>
+<li>Users could login and the cookie was set</li>
+<li>The popup stayed open but notified the embed about the logged in user</li>
+<li>The embed did not recognize the logged in user until after a refresh</li>
+</ul>
+<p>We started debugging and discovered that the embed actually makes a call to
+get details of the logged in user after it gets the notification from the
+popup. However, the result of the request was never processed. Moreso, if you
+refreshed the popup and then closed it, it worked!</p>
+<p>We spent many hours in the iPhone emulator, mostly due to the cumbersome nature
+ of all the emulators, we discovered that if you ever opened a popup and held a
+ reference to it, iOS suspends the events on the parent page but still executes
+ some of the code. So, in our case, the XHR call was being made and the
+response was receieved, but the callback was not called. The cause of our bug
+reports was this callback being responsible for closing the login popup. The
+embed was dead-locked for waiting for the request to finish to close the popup
+and the browser was waiting for the popup to close to fire the callback. As you
+ can imagine, there were no visible reports of this behavior, anywhere on the
+internets.</p>
+<p>The other one was even weirder: we were seeing a certain content being repeated
+exactly three times whereas it should have appended to the DOM only once. The
+intermittent nature of the problem suggested a hard-to-track race condition but
+ that turned out not to be the case. We were able to mitigate the problem
+easily by emptying the parent element before appending the content. This was
+only a symptomatic cure though so we proceeded on our adventure to find the root
+cause.</p>
+<p>After many hours of debugging, which was also very cumbersome due to the
+specific "ritual" to reproduce it consistently, we traced the problem to the
+XHR success callback getting called 3 times with <code>readyState == 4</code> instead of
+only once. The new information suggested, surprise, a race condition, but
+tracking the number of XHR objects eliminated that possibility entirely.</p>
+<p>It turns out that the <code>onreadystatechange</code> event was getting fired even though
+<code>readyState</code> did not change at all. Not surprisingly, since this was happening
+at the <strong>completed</strong> state, the callback was fired multiple times for the same
+request. A Google search revealed another poor soul who encountered the same
+issue: 
+<a href="https://github.com/madrobby/zepto/pull/633">https://github.com/madrobby/zepto/pull/633</a></p>
+<p>There it was: a weird, hard-to-reproduce browser bug breaking our product
+randomly. After realizing this fact, we went ahead and did what we had to do:
+<a href="https://github.com/ded/reqwest/pull/93">patched Reqwest</a>, the XHR library we
+use at Disqus.</p>
     </div>
 
     
     <footer>
         <ul class="tags">
             <li>
-                <a href="./tag/pelican.html">pelican</a>
+                <a href="./tag/browser.html">browser</a>
+            </li>
+            <li>
+                <a href="./tag/javascript.html">javascript</a>
             </li>
         </ul>
     </footer>
@@ -71,7 +123,7 @@ A place where you probably will read things only about programming
     
     <div id="disqus_thread"></div>
     <script>
-        var disqus_identifier = "hello.html";
+        var disqus_identifier = "improbable-truth-rare-browser-bugs.html";
         (function () {
             var dsq = document.createElement('script');
             dsq.type = 'text/javascript';
@@ -150,8 +202,7 @@ living at <a href="http://disqus.com">DISQUS</a>.
                     
                     
                     <a href="https://github.com/BYK"
-                       title="BYK's Profile">fork me on GitHub
-                    </a>!
+                       title="BYK's Profile">fork me on GitHub</a>!
                     
                 </p>
             </div>
