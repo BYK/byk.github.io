@@ -14,10 +14,10 @@ SITE_ICON = r'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAI
 GOOGLE_ANALYTICS = "UA-1202782-5"
 
 THEME = 'neat'
-TIMEZONE = 'US/Pacific'
+TIMEZONE = 'Asia/Istanbul'
 
 DEFAULT_PAGINATION = 3
-PRINT = True
+PRINT = False
 
 DEFAULT_LANG = 'en'
 LOCALE = ('usa', 'en_US')
