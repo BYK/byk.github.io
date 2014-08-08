@@ -5,8 +5,8 @@ from hashlib import md5
 
 SITENAME = u"Read at BYK's"
 DISQUS_SITENAME = u'readatbyks'
-SITEURL = u'http://read.byk.im'
-SITE_SOURCE = u'https://github.com/BYK/byk.github.com'
+SITEURL = u'http://byk.im'
+SITE_SOURCE = u'https://github.com/BYK/byk.github.io'
 SITE_TAGLINE = '''
 A place where you probably will read things only about programming
 '''

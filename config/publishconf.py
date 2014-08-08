@@ -5,7 +5,7 @@ import sys
 sys.path.append('.')
 from pelicanconf import *
 
-SITEURL = 'http://read.byk.im'
+SITEURL = 'http://byk.im'
 
 DELETE_OUTPUT_DIRECTORY = False
 
