@@ -143,7 +143,10 @@ article .body {
             columns: 320px auto;
        -moz-columns: 320px auto;
     -webkit-columns: 320px auto;
-    min-height: 40vh;
+        column-fill: auto;
+   -moz-column-fill: auto;
+-webkit-column-fill: auto;
+    height: 55vh;
 }
 
 article .body h3 {
