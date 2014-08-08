@@ -63,6 +63,7 @@ article footer {
     margin: 10px 0;
     padding: 5px 10px;
     font-style: italic;
+    clear: both;
 }
 
 article .body blockquote p {
@@ -92,7 +93,7 @@ pre code {
 
 .container {
     margin: 0 auto;
-    padding: 0 10px;
+    padding: 0 20px;
 }
 
 header.main {
@@ -126,10 +127,6 @@ header .logo {
     min-height: 450px;
 }
 
-.content article {
-    margin-bottom: 60px;
-}
-
 .paginator {
     float: right;
 }
@@ -147,6 +144,19 @@ article .body {
    -moz-column-fill: auto;
 -webkit-column-fill: auto;
     height: 55vh;
+    width: 60vw;
+    float: left;
+    margin-bottom: 10px;
+}
+
+#disqus_thread {
+    float: right;
+    clear: right;
+    padding: 0 10px;
+    height: 55vh;
+    width: 35vw;
+    overflow-y: auto;
+    background-color: #F9F9FF;
 }
 
 article .body h3 {
@@ -188,10 +198,6 @@ article .body-padding {
 
 article ul.tags {
     float: right;
-}
-
-.content article .share {
-    margin-top: 25px;
 }
 
 .content .list-archive {
@@ -253,7 +259,7 @@ article ul.tags {
     margin: 10px 0 0 72px;
     text-shadow: 1px 1px 0 #fff;
     overflow: hidden;
-    clear: both;
+    clear: left;
 }
 
 .about .avatar + p {

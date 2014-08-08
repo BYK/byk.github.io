@@ -89,6 +89,20 @@ randomly. After realizing this fact, we went ahead and did what we had to do:
 use at Disqus.</p>
     </div>
 
+    <div id="disqus_thread"></div>
+    <script>
+        var disqus_identifier = "improbable-truth-rare-browser-bugs.html";
+        var disqus_config = function () {
+            this.experiment.enable_scroll_container = true;
+        };
+        (function () {
+            var dsq = document.createElement('script');
+            dsq.type = 'text/javascript';
+            dsq.src = '//readatbyks.disqus.com/embed.js';
+            (document.head || document.body).appendChild(dsq);
+        })();
+    </script>
+
     <footer>
         <ul class="tags">            <li>
                 <a href="http://byk.im/tag/browser.html">browser</a>
@@ -96,17 +110,6 @@ use at Disqus.</p>
                 <a href="http://byk.im/tag/javascript.html">javascript</a>
             </li>        </ul>
     </footer>
-
-    <div id="disqus_thread"></div>
-    <script>
-        var disqus_identifier = "improbable-truth-rare-browser-bugs.html";
-        (function () {
-            var dsq = document.createElement('script');
-            dsq.type = 'text/javascript';
-            dsq.src = 'http://readatbyks.disqus.com/embed.js';
-            (document.head || document.body).appendChild(dsq);
-        })();
-    </script>
 </article>
     </div>
 
@@ -115,7 +118,7 @@ use at Disqus.</p>
             <div class="about">
                 <h3>About me</h3>
                 <img alt="Me!" class="avatar"
-                     src="http://www.gravatar.com/avatar/5754ca44a9d2c6687a8c65f5ed91d51e?size=64">
+                     src="//www.gravatar.com/avatar/5754ca44a9d2c6687a8c65f5ed91d51e?size=64">
                 <p>
 Howdy! I'm a Software Engineer living in Turkey. I LOVE Legos and Python
 whereas I write JavaScript for a living at
