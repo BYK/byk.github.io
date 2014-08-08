@@ -23,7 +23,7 @@ DEFAULT_LANG = 'en'
 LOCALE = ('usa', 'en_US')
 DEFAULT_CATEGORY = u'programming'
 
-ARTICLE_DIR = '../raw'
+PATH = '../raw'
 OUTPUT_PATH = '../'
 
 AUTHOR = u'BYK'

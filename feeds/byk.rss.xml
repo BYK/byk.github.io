@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Read at BYK's</title><link href="http://byk.im/" rel="alternate"></link><link href="http://byk.im/feeds%5Cprogramming.atom.xml" rel="self"></link><id>http://byk.im/</id><updated>2012-12-13T00:00:00+02:00</updated><entry><title>The "Improbable" Truth: Rare Browser Bugs</title><link href="http://byk.im/improbable-truth-rare-browser-bugs.html" rel="alternate"></link><updated>2012-12-13T00:00:00+02:00</updated><author><name>BYK</name></author><id>tag:byk.im,2012-12-13:improbable-truth-rare-browser-bugs.html</id><summary type="html">&lt;p&gt;Over the last two weeks at &lt;a href="http://disqus.com"&gt;Disqus&lt;/a&gt; we discovered two 
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Read at BYK's</title><link>http://byk.im/</link><description></description><atom:link href="http://byk.im/feeds%5Cbyk.rss.xml" rel="self"></atom:link><lastBuildDate>Thu, 13 Dec 2012 00:00:00 +0200</lastBuildDate><item><title>The "Improbable" Truth: Rare Browser Bugs</title><link>http://byk.im/improbable-truth-rare-browser-bugs.html</link><description>&lt;p&gt;Over the last two weeks at &lt;a href="http://disqus.com"&gt;Disqus&lt;/a&gt; we discovered two 
 annoying browser bugs. Both were only happening on iOS, which reminded me the 
 famous quote from &lt;a href="http://en.wikipedia.org/wiki/Sherlock_holmes"&gt;Sherlock Holmes&lt;/a&gt;:
  "when you have eliminated the impossible, whatever remains, however improbable, 
@@ -48,4 +48,4 @@ issue:
 &lt;p&gt;There it was: a weird, hard-to-reproduce browser bug breaking our product
 randomly. After realizing this fact, we went ahead and did what we had to do:
 &lt;a href="https://github.com/ded/reqwest/pull/93"&gt;patched Reqwest&lt;/a&gt;, the XHR library we
-use at Disqus.&lt;/p&gt;</summary><category term="browser"></category><category term="javascript"></category></entry></feed>
+use at Disqus.&lt;/p&gt;</description><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">BYK</dc:creator><pubDate>Thu, 13 Dec 2012 00:00:00 +0200</pubDate><guid>tag:byk.im,2012-12-13:improbable-truth-rare-browser-bugs.html</guid><category>browser</category><category>javascript</category></item></channel></rss>
