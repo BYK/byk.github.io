@@ -1,0 +1,79 @@
+---
+import config from "../../config.mjs";
+import SocialIcon from "./SocialIcon.astro";
+---
+
+<div class="w-full h-[1px] overflow-hidden gradient-line"></div>
+<div
+  class="py-14 transition-all duration-300 bg-gradient-to-r from-pacamara-secondary/10 to-pacamara-accent/10 dark:bg-gradient-to-r dark:from-pacamara-accent/[2%] dark:to-pacamara-secondary/[5%]"
+>
+  <footer
+    class="container text-[14px] mx-auto max-w-screen-xl flex flex-initial lg:flex-row flex-col gap-10 items-center px-7 text-pacamara-dark/40 dark:text-pacamara-white/40"
+  >
+    <ul
+      class="list-none font-normal flex flex-initial flex-row content-center items-center gap-x-[35px]"
+    >
+      <SocialIcon socialUrl={config?.social?.github} socialType="github" />
+      <SocialIcon socialUrl={config?.social?.bsky} socialType="bsky" />
+      <SocialIcon
+        socialUrl={config?.social?.instagram}
+        socialType="instagram"
+      />
+    </ul>
+    <p
+      xmlns:cc="http://creativecommons.org/ns#"
+      xmlns:dct="http://purl.org/dc/terms/"
+    >
+      <a property="dct:title" rel="cc:attributionURL" href="https://byk.im"
+        >Read at BYK's</a
+      > by <a
+        rel="cc:attributionURL dct:creator"
+        property="cc:attributionName"
+        href="https://github.com/BYK">Burak Yigit Kaya</a
+      > is licensed under <a
+        href="https://creativecommons.org/licenses/by-nc-nd/4.0/?ref=chooser-v1"
+        target="_blank"
+        rel="license noopener noreferrer"
+        > CC BY-NC-ND 4.0
+        <img
+          class="inline-flex w-auto h-[22px] transition-all duration-300"
+          src="https://mirrors.creativecommons.org/presskit/icons/cc.svg?ref=chooser-v1"
+          alt=""
+        /><img
+          class="inline-flex w-auto h-[22px] transition-all duration-300"
+          src="https://mirrors.creativecommons.org/presskit/icons/by.svg?ref=chooser-v1"
+          alt=""
+        /><img
+          class="inline-flex w-auto h-[22px] transition-all duration-300"
+          src="https://mirrors.creativecommons.org/presskit/icons/nc.svg?ref=chooser-v1"
+          alt=""
+        /><img
+          class="inline-flex w-auto h-[22px] transition-all duration-300"
+          src="https://mirrors.creativecommons.org/presskit/icons/nd.svg?ref=chooser-v1"
+          alt=""
+        /></a
+      >
+    </p>
+    <div class="grow lg:text-right">
+      <div class="logo flex-none">
+        <a
+          href="/"
+          class="font-bold text-lg font-pacamara-space hover:text-pacamara-accent transition-all duration-300 dark:text-white dark:hover:text-pacamara-accent"
+          >Pacamara</a
+        > theme for <a href="https://astro.build/">Astro</a>
+      </div>
+      <span class="transition-all duration-300">
+        made with <span class="text-pacamara-accent">&hearts;</span> by <a
+          href="https://maciekpalmowski.dev/"
+          target="_blank"
+          class="transition-all duration-300 text-pacamara-dark/60 dark:text-pacamara-white/60 hover:text-pacamara-accent"
+          >Maciek Palmowski</a
+        > and <a
+          href="https://kinsta.com"
+          class="transition-all duration-300 text-pacamara-dark/60 dark:text-pacamara-white/60 hover:text-pacamara-accent"
+          >Kinsta</a
+        >
+      </span>
+    </div>
+  </footer>
+</div>
