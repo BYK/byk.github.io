@@ -1,0 +1,71 @@
+---
+pubDate: 2022-03-24
+author: byk
+tag: electronics
+title: Life Lessons from a Rotary Encoder
+intro: When you have eliminated the impossible, whatever remains, however improbable, must be the truth.
+slug: life-lessons-from-a-rotary-encoder
+---
+
+import { Image } from "astro:assets";
+import rotaryEncoderPulse from "../../assets/rotary-encoder-pulse.png";
+import incrementalDirectionalRotaryEncoder from "../../assets/incremental-directional-rotary-encoder.gif";
+import lilaRotaryEncoderTwist from "../../assets/lila-rotary-encoder-twist.gif";
+
+Recently I got back into an archaic pastime activity of mine: working on hobby electronics. I already had a breadboard lying around but since I am lazy I wanted an Arduino board, complete with all the things I may possibly need: push buttons, LEDs, a 7-segment display, a dot-matrix LCD etc. I bought a [TinyLab](https://www.robotistan.com/tinylab-exclusive-kit) experiment board based on the recommendation from my poorer self [from 6 years ago on Facebook](https://www.facebook.com/madBYK/posts/10154533891557907). I know Facebook is an evil machine forced upon us by our alien overlords but it has a tender side surfacing ancient wisdom via its memories feature. Anyway, one of the crucial and interesting components on the board was the rotary encoder. With its infinite, tactile rotation and the new-found popularity among the mechanical keyboard community, this little knob quickly became my new obsession. Trying to read from what’s passing through its contacts would lead to profound realizations about life, universe, and everything — moving our understanding of 42, an inch forward.
+
+My rotary encoder has 5 contacts: VCC, ground, Phase A, Phase B, and push button. It is of the mechanical type. A mechanical encoder means there is mechanical contact between these A and B pins and the rotating disk inside. It is a lot like a pair of buttons being smashed in perfect order tens of times per second. The most interesting part is the rotation direction detection which is roughly done by figuring out which of these buttons get smashed first. The reason these pins are called “phase” contacts is because when the encoder is rotated, you get a square wave out of them which are out of phase by 90 degrees. This is so that you can determine the direction of rotation based on whichever is ahead of the other.
+
+<a href="https://en.wikipedia.org/wiki/File:Quadrature_Diagram.svg">
+  <Image
+    src={rotaryEncoderPulse}
+    class="dark:invert"
+    width="750"
+    alt="Two square waves in quadrature. Drawn to match the Gray code chart in Rotary encoder. In this diagram, clockwise rotation is towards the right, and counter-clockwise to the left."
+  />
+</a>
+
+As a self-thought programmer who’s been writing code for 24 years on “ideal” computers, I didn’t even bother to learn much of the above at first. For me, this was simple:
+
+1. there are two buttons
+1. in each loop you read the values of these
+1. if both are 0 = no rotation
+1. if one is 1 and the other is 0 = encoder is turning in the direction of the pin that is on
+
+Oh the arrogance even at this ripe age of 33! I was so wrong that it took me a whopping 3 days to reliably read this tiny little marvel of electromechanics. Let’s start with the “obvious” issues:
+
+1. Reading 0 from both pins does not mean we are stopping
+1. It is possible to read 1 from both pins and the one being 1 does not dictate the direction by its own
+1. If you read the values in each loop, you may actually miss values as they don’t sit there and wait for you to read. Life goes on, the encoder keeps rotating, and if your main loop is slow you miss your window of opportunity
+
+So that’s 3 out of 4 from my initial assumptions. At least, I was right about there being two buttons. Sort of.
+
+The solutions were simple but profound. For timing, you prioritize reading rotary encoder inputs by using pin interrupts. An interrupt is a special instruction in micro-controllers that tell them to drop whatever they are doing and attend a special task. It is a lot like when your kid starts screaming: you drop whatever you’re doing and immediately ~~shush~~ soothe her. Luckily, rotary encoders are less demanding than toddlers: they just want to be heard (well, maybe kids want _just that_ too?). So we read and store the state of these A and B pins when there’s a change. Ideally we’d set up the interrupts on both pins but due to the wiring of my board, and some limitations of the Atmega 32u4, I could only listen to one pin. This is very much like hearing only from one of your ears as the other one is gone due to the earlier screaming. Not terrible but you just have to accept the fact that you may not register the initial click in one direction. Again, definitely much less worse than losing your sense of sound directionality along with your will to live after getting yelled at your right ear just because you shut the water faucet off that has been running for the past 187 seconds for the entertainment of a little human’s growing mind.
+
+<a href="https://en.wikipedia.org/wiki/File:Incremental_directional_encoder.gif">
+  <Image
+    src={incrementalDirectionalRotaryEncoder}
+    class="dark:invert"
+    width="750"
+    alt="Example of two-row rotary encoder for speed and direction detection. Basically a 2-bit Gray code pattern."
+  />
+</a>
+
+The solution to detecting the direction of a “click” is also simple: just do some book keeping. Record which pin got triggered first, then on the next cycle compare its value with the new state. For instance if you saw A go high (meaning it switched from 0 to 1), while B is 0 you are rotating in one direction (phase of A is ahead of B). If B was 1 while A was going high, that means it is rotating in the other direction as phase of B is ahead of A (or they are playing a weird version of beer pong). Since this is a bunch of if statements and some variables, I wrote it up and tested quickly. I surely was able to read every single click on the encoder, that said the direction was completely unstable. Just like a toddler learning to ride a scooter, the direction was flipping like crazy. This made no sense at all (except for toddlers and scooters). Computer chips and solid metal disks listen to reason unlike 2-year-old human beings!
+
+I tried blaming the compiler gods but they were too busy torturing my boxed copy who is learning Rust from a borrowed future memory segment[^1]. Thus, I seized this rare moment where I got to put my computer science knowledge to work. I was going to build a state machine as [one wise blog post](https://readwise.io/reader/shared/01jfx8n0nkgmnsjk9zmx31y2zj) suggested. The idea is deceptively simple: not all states you can read from the pins are valid states. For instance, if you look at the wave picture above, you’d see that when you are turning in one direction, you should never see pin A from going low to high while B is 0. So you construct a state table, listing all states and valid state transitions you may accept, and ignore everything else. Doing this fixed all the weird direction jumps! The little cost I paid was some skipped clicks very occasionally but that’s a little price to pay for stability.
+
+<Image
+  src={lilaRotaryEncoderTwist}
+  width="750"
+  alt="Short clip of a rotary encoder being used to control a number on a 7-segment display."
+/>
+
+Although this was a success, I was simply wondering why I had to use actual math and science and how these invalid state transitions could happen in the first place. After some googling, it finally hit me: nothing is ideal, especially mechanical contacts! We can model them and show diagrams like the ones above as their idealized approximations but real world is just messy. It was simply the stuttering of these imperfect copper contacts, sending hysterical signals to my code which expected a perfect square wave. No wonder why it was confused.
+
+In the end, I was quite surprised by getting smacked in the face by a rotary encoder with bitter truths about life:
+
+- timing and catching your window of opportunity is very important
+- life is just messy, no matter how much you try to smooth it out
+
+[^1]: [Rust](https://en.wikipedia.org/wiki/Rust_%28programming_language%29) is a newish programming language that has a notoriously high learning-curve but provides great memory safety.
