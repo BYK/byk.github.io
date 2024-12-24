@@ -3,7 +3,7 @@ export default {
   titleSuffix: "",
   description:
     "Random ramblings of a software engineer. Mostly about software, sometimes about life.",
-  defaultOgImage: "./defaultog.jpg",
+  defaultOgImage: "./logo.png",
   latestPosts: 3,
   postsPerPage: 3,
   url: "https://byk.im",
