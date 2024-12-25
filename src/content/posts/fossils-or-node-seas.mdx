@@ -1,0 +1,98 @@
+---
+pubDate: 2025-02-12
+author: byk
+tag: nodejs
+title: Making your Node.js application last centuries
+intro: Creating self-contained & dependency-free Node.js applications across platforms
+slug: fossilize
+image: ../../assets/fossil.jpg
+---
+
+I’ve been working on [Sentry Spotlight][1] for the past several months. One of the things I wanted to do was to reduce the friction on trying out and adopting Spotlight.
+You don’t need to know what Spotlight is (yet!) to enjoy this thriller but if you really must know, it is a local and offline debugging tool leveraging Sentry SDKs. It supports errors, traces, and very soon profiling data 🤞🏻.
+
+## One binary to rule them all
+
+Now, where were we? Right, it was a bright San Francisco morning when I decided to create a self-contained binary for Spotlight that you could "just download" and run. Nothing else needed. Without such a binary, you either need to have `node` & `npx` or `docker` on your system. I think we have enough haters for both (rightfully so). Besides, I wanted to make Spotlight accessible to everyone. For
+instance, if you are an Android developer you probably neither have `node` nor `docker` on your system and have no reason to install any of them.
+
+We do have the Electron app, that said we only have it for macOS, and, I don't really
+like the idea of shipping an entire browser for an application that has a simple web
+interface and works over HTTP.[^1]
+
+## Enter Node.js Single Executable Applications
+
+So, I started looking into ways to create a self-contained binary for a NodeJS application. I know tools exist for Python so I was hoping that there would be _something_ for Node.js too. I came by [nexe][2] and I was
+about to give it a shot when I noticed this "[Node.js Single Executable Applications (SEA)][3]" entry on Google. Sure enough, Node.js folks were adding exactly what I was looking for into Node.js itself! I quickly tried out the steps listed and started jumping up and down with some hideous dance moves in between when I got a working binary for Spotlight.
+
+It was a bit laborious but OK for a local test. To be able to actually use this in a fully-automated CI system, there were a few things that needed sorting out:
+
+1. Spotlight server needs to become a single, dependency-free CommonJS file
+1. I need to ship the Spotlight frontend assets with the binary
+1. I need a maintainable script to do all the above and build the binary
+
+## Single-file Node.js Application (not a binary)
+
+Creating dependency-free CommonJS files is not something I'm unfamiliar with. I've first encountered this technique when I was working on [Yarn][4] quite a while ago. Back then, some smart folks at Facebook (nee Meta) realized they can pack a Node.js app into a single file just like a bundled web application[^2]. This was using a bundler such as Webpack (remember, this is 2015). I then used this technique on [Craft][5] during my first stint at Sentry. This method already makes it easier to distribute and run a Node.js application without needing to install any dependencies. But it still requires `node` to be installed on the system (and it needs the _correct_ version of it).
+
+Due to my past good memories from Craft, I chose [esbuild][6] as my trusty (and swift) bundler for the job. Just as I was thinking this was too easy, I found myself
+on the sidelines of the great ESM vs CJS war. As an application built in the modern times, Spotlight is using ESM modules all around. This also meant no more pesky `__filename` and `__dirname` globals and using the new [`import.meta`][7] instead.
+When you compile this into a CommonJS bundle naively, `import.meta` becomes an empty object, making `import.meta.url` undefined, making it impossible to determine where your script is running. Thankfully[^3], I was [not the first person to bump into this][8] and there was [a simple yet crude solution][9] that I'd happily take.
+
+## Packing the frontend assets in
+
+The assets needed for Spotlight's UI are not much: just an HTML page and an accompanying JS bundle. The first thing I tried was to bake these in with hard-coded names which worked just fine.
+But I was acutely aware that it was not future-proof at all. It is easy to add more resources to a frontend application: be it split JS chunks, some images, or separate CSS files.
+I could just pack everything in the `dist` folder where the assets were generated into, but currently, the Node SEA resources API does not have a discovery mechanism. If you know the name of the resource(s), you can read them but if you don't GLHF.
+
+Luckily again, all the bundlers produce a `manifest.json` file that lists all the resources they've generated and their relationship with each other. I could just read this file and pack all the resources listed in it along with the manifest file with the well-known name `manifest.json`. This way, I could read the manifest file and discover all the resources I need to serve the UI. And that is exactly what I did.
+
+Now all that is left was codifying all this logic in a neat little script that I could run on my CI system and get a shiny new binary at the end. Or was it?
+
+## A wild boss appears: signing and notarizing on macOS
+
+Of course, if it wasn't for my arch nemesis, macOS, how could we have fun[4^]? Starting from macOS Catalina (circa 2019), Apple requires all applications to be signed and notarized to be able to run without any warnings. The signature is a
+hard-requirement to be able to run the file at all whereas notarization is to remove the warning and prompt.
+
+Any security-conscious developer would not eschew code signing and maybe even some sort of permission grants. That said since this is Apple, the grand builder and guardian of walled gardens, the Apple-specific way of doing these are quite tyrannical. You need to have an Apple Developer account (only $99/annum!), you need
+to have a Mac, you need to use XCode and its toolchain, and you need to have a lot of patience. I had none of these. I'm a creature of speed and efficiency and rebellion.
+I _could_ run the signing portion on a macOS runner on GitHub Actions but I can create all the binaries (including Windows ones) on a Linux machine, with a neat list of target architectures. I just don't want to split _just that part_ of the process.
+
+After a lot of reading, exploration, and trial & error, I discovered the minimal steps
+and required files and certificates and secrets you need to get this done[^5]. I also remembered the ambitious project from [indygreg][10], opening Apple's code signing black box to the masses and to other platforms: [apple-platform-rs][11].
+Now, with the power of `rcodesign`, I could sign and notarize by bespoke binaries
+for macOS on the standard Linux CI machines.
+
+Take that, final boss!
+
+## A maintainable ~~script~~ tool for all this
+
+With all the stuff build in, my "simple" build script became a [~200-line monster][12] with a few support files around. It was somewhat generalized but not enough for me to share it easily with others to prevent further suffering. This is why I decided to create a tool that would encapsulate all this logic and make it easy for anyone to create a self-contained binary for their Node.js application: presenting [fossilize][13]!
+
+Fossilize does all the things above, including macOS signing and auto-discovery of assets through a Vite-compatible `manifest.json` file. It also caches the Node.js binaries it downloads to speed things up on repeated builds. It supports using different Node.js versions and understands a few simple aliases such as `local`, `latest`, and `lts`.
+
+One irony is `fossilize` itself cannot be fossilized at the moment due to some of its dependencies requiring dynamically determined native binaries per platform and some obscure issue with [postject][14] not being able to postject code containing itself.
+I'm planning to tackle these with the help of WASM but for now, I think `fossilize` is in a good place to serve the need.
+
+Onwards 🚀
+
+[^1]: Yet I happily use VS Code and Slack. Oh the hypocrisy!
+[^2]: They also did even smarter things like code caching to speed up start up times. Node SEA also [supports this](https://nodejs.org/api/single-executable-applications.html#v8-code-cache-support).
+[^3]: Or unfortunately, depending on how you look at it.
+[^4]: Hoping your definition of fun includes several days of trial & error, reading docs written as if you have to use Apple devices competently with an ambition of reaching Lord of the Rings levels of prose, and some late nights.
+[^5]: A blog post dedicated to this journey is being written as of this writing.
+
+[1]: https://spotlightjs.com/
+[2]: https://github.com/nexe/nexe
+[3]: https://nodejs.org/api/single-executable-applications.html#single-executable-applications
+[4]: https://classic.yarnpkg.com/lang/en/
+[5]: https://github.com/getsentry/craft/
+[6]: https://esbuild.github.io/
+[7]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import.meta
+[8]: https://github.com/evanw/esbuild/issues/1492
+[9]: https://github.com/evanw/esbuild/issues/1492#issuecomment-893144483
+[10]: https://gregoryszorc.com/
+[11]: https://github.com/indygreg/apple-platform-rs/
+[12]: https://github.com/getsentry/spotlight/blob/bb7a499e5f95db84bab3c2929762ddc87cf36350/packages/spotlight/build.js
+[13]: https://github.com/BYK/fossilize
+[14]: https://github.com/nodejs/postject
