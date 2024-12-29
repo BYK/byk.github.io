@@ -3,10 +3,12 @@ const { postData, num } = Astro.props;
 import { Image } from 'astro:assets'
 import PublishDate from "./PublishDate.astro";
 import Tag from "../general/Tag.astro";
+import ReadingInfo from "../../components/blog/ReadingInfo.astro";
 // default image if no image added
 import defaultImage from "../../assets/article.png";
 
 const isOdd = num % 2;
+const { remarkPluginFrontmatter } = await postData.render();
 ---
 <article
     class="
@@ -40,6 +42,7 @@ const isOdd = num % 2;
             <p class="flex flex-row flex-wrap gap-5 items-center mt-5 group-last:mb-0">
                 <Tag tag={postData.data.tag} />
                 <PublishDate date={postData.data.pubDate} />
+                <ReadingInfo words={remarkPluginFrontmatter.words} />
             </p>
         </div>
     </div>

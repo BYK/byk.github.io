@@ -5,6 +5,7 @@ import Base from "../../layouts/Base.astro";
 import AuthorInfo from "../../components/blog/AuthorInfo.astro";
 import LatestPosts from "../../components/blog/LatestPosts.astro";
 import PublishDate from "../../components/blog/PublishDate.astro";
+import ReadingInfo from "../../components/blog/ReadingInfo.astro";
 import Tag from "../../components/general/Tag.astro";
 
 import { getCollection, getEntry } from "astro:content";
@@ -20,7 +21,7 @@ export async function getStaticPaths() {
 const { entry } = Astro.props;
 entry.data.type = "blog";
 
-const { Content } = await entry.render();
+const { Content, remarkPluginFrontmatter } = await entry.render();
 const author = await getEntry(entry.data.author);
 
 ---
@@ -34,6 +35,7 @@ const author = await getEntry(entry.data.author);
         <p class="flex flex-row flex-wrap gap-5 items-center font-pacamara-space mx-auto max-w-screen-lg mb-7">
             <Tag tag={entry.data.tag} />
             <PublishDate date={entry.data.pubDate} />
+            <ReadingInfo words={remarkPluginFrontmatter.words} />
         </p>
     </div>
     {entry.data.banner &&

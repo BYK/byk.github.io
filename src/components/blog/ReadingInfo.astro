@@ -1,0 +1,11 @@
+---
+const { words } = Astro.props;
+const readingTimeMinutes = Math.ceil(words / 200);
+const minutesText = readingTimeMinutes === 1 ? "minute" : "minutes";
+---
+
+<small
+  class="text-italic text-pacamara-primary/50 font-pacamara-space tracking-widest transition-all duration-300 text-[16px] dark:text-white/40"
+>
+  ~{readingTimeMinutes} {minutesText} ({words} words)
+</small>
