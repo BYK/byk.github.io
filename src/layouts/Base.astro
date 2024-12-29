@@ -26,11 +26,11 @@ const { postData } = Astro.props;
         // Runs on view transitions navigation
         document.addEventListener('astro:after-swap', setDarkMode);
     </script>
-    
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="view-transition" content="same-origin" />
-    <link rel="alternate" type="application/rss+xml" title="RSS Feed" href="./rss.xml" />
+    <link rel="alternate" type="application/rss+xml" title="Read at BYK's" href={new URL("rss.xml", Astro.site)} />
     <SeoHead postData={postData} />
     <link rel="preload" href="/fonts/inter-v12-latin_latin-ext-regular.woff2" as="font" crossorigin>
     <link rel="preload" href="/fonts/inter-v12-latin_latin-ext-700.woff2" as="font" crossorigin>
