@@ -3,7 +3,7 @@ import config from '../../config.mjs';
 
 const { postData } = Astro.props;
 
-const title = ( postData?.data?.title ? postData.data.title : config.title ) + config.titleSuffix;
+const title = ( postData?.data?.title ? postData.data.title : config.title );
 const description = postData?.data?.description ? postData.data.description : config.description;
 const permalink = new URL(Astro.url.pathname, Astro.url);
 const image = postData?.data?.image ? postData.data.image.src : config.defaultOgImage;

@@ -1,6 +1,5 @@
 export default {
   title: "Read at BYK's",
-  titleSuffix: "",
   description:
     "Random ramblings of a software engineer. Mostly about software, sometimes about life.",
   defaultOgImage: "./logo.png",

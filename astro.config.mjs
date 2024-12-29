@@ -20,4 +20,9 @@ export default defineConfig({
     icon(),
   ],
   site: "https://byk.im",
+  vite: {
+    ssr: {
+      external: ["astro/container", "@astrojs/mdx"],
+    },
+  },
 });
