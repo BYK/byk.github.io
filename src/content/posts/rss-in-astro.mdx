@@ -1,0 +1,83 @@
+---
+pubDate: 2024-12-30
+author: byk
+tag: javascript
+title: Having a Good Ol' RSS Feed in Astro
+intro: How to get a proper RSS feed for your blog in Astro with full content and images.
+slug: good-old-rss-feed-in-astro
+image: ../../assets/rss-logo.png
+---
+
+After reviving this blog with [Astro](https://astro.build), I realized that I didn't have an RSS feed even though the theme I'm using already has support for that.
+So I got to work to enable this. After much trial and error, I finally figured out that the method name in the
+[endpoint definition](https://github.com/palmiak/pacamara-astro/blob/cbff90909afbf4fa08fdfd47c860d4c732b00330/src/pages/rss.xml.js#L5) should be `ALL_CAPS` as in `GET`
+instead of `get`. I'm guessing this was because of a major Astro version upgrade since [the demo page for Pacamara](https://pacamara-astro-6y7xr.kinsta.page/) has a working RSS feed.
+Fixed that that and problem solved, right? RIGHT?
+
+Sort of.
+
+Yes, I got _a_ feed but I noticed 3 major problems:
+
+1. The feed did not have the full content of the posts
+2. The feed did not limit the number of entries
+3. The feed did not sort the posts in any way
+
+Although unsorted and uncapped posts was not a big deal as I only had 3 posts at the time, it looked like an easy fix so I started with that:
+
+```js
+const MAX_ITEMS = 10;
+
+const posts = (await getCollection("posts"))
+  .sort(descDateSort)
+  .slice(0, MAX_ITEMS);
+```
+
+Quite straightforward: get all the posts, sort by date in descending order, and slice the first 10. Don't know why this is not the default or a least is offered through a built-in helper, but let's move onto the bigger issue.
+
+Getting the full content of the posts in RSS was much trickier as the RSS endpoint was defined as an ["endpoint"](https://docs.astro.build/en/guides/endpoints/#static-file-endpoints) and was not able to render Astro components.
+Even [the recipe for RSS on Astro docs](https://docs.astro.build/en/recipes/rss/) says this is only possible for Markdown only _and_ it uses a custom Markdown renderer 🤯.
+But I was determined, and was a devotee of "the search church" so off I went to find a solution.
+
+Although there was this [very creative solution](https://scottwillsey.com/rss-pt2/), I bumped into a more straightforward one first: https://blog.damato.design/posts/astro-rss-mdx/.
+This solution uses the new and experimental [Astro Containers](https://docs.astro.build/en/reference/container-reference/) to be able to render an Astro component in isolation inside the endpoint.
+I followed the instructions and voilà! I had a working RSS feed with full content indeed. [Committed](https://github.com/BYK/byk.github.io/commit/0449bf42da53a98f72dbafe5e915fa6a4f530eba), pushed, and [got yelled at by GitHub Actions](https://github.com/BYK/byk.github.io/actions/runs/12537931496/job/34962544900) with the following cryptic error:
+
+```shell
+cannot test case insensitive FS, CLIENT_ENTRY does not point to an existing file: /home/runner/work/byk.github.io/byk.github.io/dist/client/client.mjs
+```
+
+I ran `npm run build` on my local terminal immediately, and was able to reproduce the error locally. At least, I was not going to play the "try blind commits to see what the CI says" game.
+
+After searching for this error for about an hour, I realized that _something_ was triggering a client-side render mode in Vite (Astro's underlying bundler) and I started to remove every single new line of code I added.
+Indeed, once I disabled the import for both `@astrojs/container` and `@astrojs/mdx` the build error disappeared. As to why this was happening, I still had no idea. I kept digging and finally found this random (and very helpful)
+message on the Astro Containers Stage 3 proposal thread: https://github.com/withastro/roadmap/pull/916#issuecomment-2256059117
+
+```js
+// astro.config.mjs -- add the following
+{
+  vite: {
+    ssr: {
+      external: ['astro/container', '@astrojs/mdx'],
+    },
+  },
+}
+```
+
+Of course this makes sense! Without the above configuration, Vite tries to put these Astro packages into a client bundle whereas I am strictly operating in a server-side rendering world. Once this is in, the build error went away with MDX rendering still intact.
+I quickly pushed the code, got my deploy, and had my RSS feed! 🎉
+
+I wanted to test my feed before declaring a complete victory so I loaded it up in [Readwise Reader](https://readwise.io/i/burak13), my RSS reader of choice, and saw that the images were not loading. I quickly realized that I (well, Astro) was using
+relative paths for the images and that's simply not how RSS works! I had to make all these image URLs absolute which was supposed be quite straightforward.
+
+For some reason, I couldn't find that simple answer after much searching.
+Then I tried to hook into the MDX pipeline to modify the URLs only to be disappointed as the image URLs are generated much later in the process and all I got was a JS identifier for the image source 🤦🏻‍♂️.
+After more research, I learned all about Astro's image processing pipeline, found out about its `getURL()` method, dug into its source code and
+[finally saw that it uses `import.meta.env.BASE_URL`](https://github.com/withastro/astro/blob/ebe2aa95c7f4a6559cec8b82d155da34a57bdd53/packages/astro/src/assets/services/service.ts#L370) as the base!
+
+Easy, I thought: I'll just set that in the config under `vite: {base: '...'}`. That didn't work. Then I tried setting it on the top-level Astro config only to be disappointed again. I also tried some other, sillier things that I don't want to admit doing here.
+Finally, like really finally, I found the answer in [`build.assetsPrefix`](https://docs.astro.build/en/reference/configuration-reference/#buildassetsprefix)! Set this to my blog's main URL, tested in dev mode to make sure it still works, got a full build,
+checked the `rss.xml` output and saw that the image URLs were now absolute! 🎉🎉🎉
+
+So, if you ever want the same (Astro blog with full content RSS feed and working images), I hope I can save you some hours with this post.
+
+Oh, by the way, if you want to [subscribe to my blog](/rss.xml), now you can 😏
