@@ -9,7 +9,8 @@ import config from "../config.mjs";
 const MAX_ITEMS = 10;
 
 export async function GET(context) {
-  const container = await AstroContainer.create();
+  // This method is borrowed from https://blog.damato.design/posts/astro-rss-mdx/
+  const container = await AstroContainer.create({});
   container.addServerRenderer({ renderer: mdxRenderer });
   const posts = (await getCollection("posts"))
     .sort(descDateSort)
