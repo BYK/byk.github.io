@@ -9,10 +9,10 @@ image: ../../assets/rss-logo.png
 ---
 
 After reviving this blog with [Astro](https://astro.build), I realized that I didn't have an RSS feed even though the theme I'm using already has support for that.
-So I got to work to enable this. After much trial and error, I finally figured out that the method name in the
+So I got to work to enable it. For some reason, I just did not have the `rss.xml` file generated. After much trial and error, I finally figured out that the method name in the
 [endpoint definition](https://github.com/palmiak/pacamara-astro/blob/cbff90909afbf4fa08fdfd47c860d4c732b00330/src/pages/rss.xml.js#L5) should be `ALL_CAPS` as in `GET`
 instead of `get`. I'm guessing this was because of a major Astro version upgrade since [the demo page for Pacamara](https://pacamara-astro-6y7xr.kinsta.page/) has a working RSS feed.
-Fixed that that and problem solved, right? RIGHT?
+Fixed that and problem solved, right? RIGHT?
 
 Sort of.
 
