@@ -4,7 +4,7 @@ export default {
     "Random ramblings of a software engineer. Mostly about software, sometimes about life.",
   defaultOgImage: "./logo.png",
   latestPosts: 3,
-  postsPerPage: 3,
+  postsPerPage: 5,
   url: "https://byk.im",
   social: {
     facebook: "https://www.facebook.com/madBYK/",
