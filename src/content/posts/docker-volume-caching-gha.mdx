@@ -47,7 +47,7 @@ So, with all this information, what is needed to cache Docker volumes on GitHub 
 
 1. Set `+x` permission on `/var/lib/docker`
 1. Set `+rx` permission on `/var/lib/docker/volumes`
-1. Set `u+x` permission on `tar`
+1. Set `u+s` permission on `tar`
 1. Use `tar --numeric-owner` to create the archive -- oh wait, you can't because `actions/cache` doesn't let you (╯°□°)╯︵ ┻━┻<sup>(╯°□°)╯︵ ┻━┻<sup>(╯°□°)╯︵ ┻━┻<sup>(╯°□°)╯︵ ┻━┻</sup></sup></sup>
 
 ## Side quest: Hacking `tar` on GitHub Actions
