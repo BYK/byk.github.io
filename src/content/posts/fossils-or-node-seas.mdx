@@ -67,7 +67,7 @@ Take that, final boss!
 
 ## A maintainable ~~script~~ tool for all this
 
-With all the stuff build in, my "simple" build script became a [~200-line monster][12] with a few support files around. It was somewhat generalized but not enough for me to share it easily with others to prevent further suffering. This is why I decided to create a tool that would encapsulate all this logic and make it easy for anyone to create a self-contained binary for their Node.js application: presenting [fossilize][13]!
+With all the stuff built in, my "simple" build script became a [~200-line monster][12] with a few support files around. It was somewhat generalized but not enough for me to share it easily with others to prevent further suffering. This is why I decided to create a tool that would encapsulate all this logic and make it easy for anyone to create a self-contained binary for their Node.js application: presenting [fossilize][13]!
 
 Fossilize does all the things above, including macOS signing and auto-discovery of assets through a Vite-compatible `manifest.json` file. It also caches the Node.js binaries it downloads to speed things up on repeated builds. It supports using different Node.js versions and understands a few simple aliases such as `local`, `latest`, and `lts`.
 
