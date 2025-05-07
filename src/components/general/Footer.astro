@@ -13,6 +13,7 @@ import SocialIcon from "./SocialIcon.astro";
     <ul
       class="list-none font-normal flex flex-initial flex-row content-center items-center gap-x-[35px]"
     >
+      <SocialIcon socialUrl={new URL("rss.xml", Astro.site)} socialType="rss" />
       <SocialIcon socialUrl={config?.social?.github} socialType="github" />
       <SocialIcon socialUrl={config?.social?.bsky} socialType="bsky" />
       <SocialIcon socialUrl={config?.social?.flickr} socialType="flickr" />
@@ -54,6 +55,9 @@ import SocialIcon from "./SocialIcon.astro";
           alt=""
         /></a
       >
+      <form action="https://api.follow.it/subscription-form/ZVIzZnRCT09rVHYxdnVhN2VOem9abzZjZnRZcUdadjZiTU4wdDZ1T1BxUm1SbEZSZ0JiS1ErQllLSDI0K1dkUG5iWlFTUEU5UGFRblAwV1czUWwvN0d1UC8zUDFzd0tyZlZRdGp4ekEvS3RLSlRGNzM4QlNaeWw3aU9nN2hCQ0F8NGJhU2kxR2srcnB5WkozbVdCQ2RFVWJzM2ZmcmVvaVd2VE13U2pFaVQ4WT0=/8" method="post">
+        <input type="email" placeholder="Subscribe via email" name="email" class="bg-transparent border-pacamara-secondary border-[1px] leading-none rounded-full py-3 px-5 text-pacamara-secondary hover:bg-pacamara-accent hover:border-pacamara-accent hover:text-pacamara-white transition-all duration-300" />
+      </form>
     </p>
     <div class="grow lg:text-right">
       <div class="logo flex-none">
