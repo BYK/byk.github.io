@@ -12,5 +12,6 @@ export default {
     instagram: "https://www.instagram.com/madbyk_/",
     twitter: "https://twitter.com/madbyk",
     bsky: "https://bsky.app/profile/byk.im",
+    flickr: "https://www.flickr.com/photos/bykaya/",
   },
 };
