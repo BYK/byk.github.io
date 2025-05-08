@@ -1,0 +1,197 @@
+---
+pubDate: 2025-05-08
+author: byk
+tag: apple
+title: Nightmare on Apple Street
+intro: Finding your way around Apple's code signing requirements without macOS
+slug: apple-code-signing-x-platform
+image: ../../assets/apple.jpg
+---
+
+_\*Clicks fingers, clears throat\*_
+
+Okay, I have procrastinated on this post for, _checks notes_, 3 months now. It's time. Time to let go of all the bad memories and the pain.
+
+See, all I wanted to do was to [create a terminal application](/posts/fossilize#a-wild-boss-appears-signing-and-notarizing-on-macos) that you can just download and run on Linux, macOS, and Windows.
+I also got a bit ambitious and wanted to create this app on, _\*gasp\*_, Linux! And you know, it worked on Windows.
+Yeah, _that_ Windows that every developer loves to hate but secretly uses one way or another. But macOS? No no no no no, tsk tsk tsk, not so fast little boy.
+You need to sign & notarize your stuff, and you need to do it **The Apple Way™**.
+
+## The Apple Way™
+
+The very first thing Apple wants is ~~your money~~ an Apple Developer account which will [set you back $99](https://developer.apple.com/programs/whats-included/)[^1]. Every year that is.
+Oh, and you cannot _just_ create a developer account. You see, you need One Apple Account™.
+If this is going to be a personal developer account, you _just_ need your name, email, phone number, and your address[^2]. If you are trying to enroll your organization, god help you: you need your [D-U-N-S number](https://developer.apple.com/help/account/membership/D-U-N-S/).[^3]
+
+Now that we have warmed up, it is time for you to create an identifier for your application.
+They recommend using a reverse-domain like name: `com.my-company.my-app`. I know, you just want to self-distribute a simple binary.
+Yes, you still need the unique identifier. No, you cannot use `asdf` or `foobar`.
+Okay head over to [identifier creation page](https://developer.apple.com/account/resources/identifiers/bundleId/add/bundle) and get it over with please. I'll `await`.
+I _think_ you leave the capabilities empty.
+
+## Switching to the Highway
+
+After this step we need to add a certificate to our account. Now, if you have XCode, there's a built in UI for this. But remember, we don't have access to macOS where XCode can only survive in. Hence we will go
+rogue and will create a certificate signing request (CSR) using the command line. We need a "private key" to create a CSR so we'll be creating that via the CLI too.
+Might seem complicated but it is just answering a bunch of questions and shuffling some files around.
+
+For this, we'll be needing 2 tools:
+
+1. `openssl`[^4]
+1. [`rcodesign`](https://github.com/indygreg/apple-platform-rs/releases/latest)
+
+Let's start with the private key:
+
+```shell
+openssl genrsa -out private.pem 2048
+```
+
+Now that we have generated our private key in `private.pem`, we can create the CSR using `rcodesign`:
+
+```shell
+rcodesign generate-certificate-signing-request --pem-file private.pem --csr-pem-file csr.pem
+```
+
+Okay, we have the signing request in `csr.pem`. Now we head to the page where you can [add a certificate](https://developer.apple.com/account/resources/certificates/add)
+and follow the steps below:
+
+1. From the gazillion options, select **Developer ID Application**.
+1. Select `G2 Sub-CA (Xcode 11.4.1 or later)` for **Profile Type**.
+1. Upload the `csr.pem` file we just created.
+1. Now we should arrive at a page saying "Download Your Certificate"
+1. Save this file as `pass.cer` next to the other ones and keep them safe.
+1. Download Apple's root certificate and convert to PEM format (Apple Worldwide Developer Relations Certification Authority)
+
+   ```shell
+   wget http://developer.apple.com/certificationauthority/AppleWWDRCA.cer
+   # Convert that to PEM format
+   openssl x509 -inform der -in AppleWWDRCA.cer -out AppleWWDRCA.pem
+   # Convert pass.cer to PEM format
+   openssl x509 -inform der -in pass.cer -out pass.pem
+   ```
+
+1. Note down your cert expiration date. You'll need to do this entire dance again some days before this date:
+
+   ```shell
+   openssl x509 -in pass.pem -noout -enddate
+   ```
+
+1. Now we are going to combine everything into a P12 file.
+   Make sure to replace `Company Name` in the command line arguments below with your company name or your name.
+
+   ```shell
+   openssl pkcs12 -export -clcerts -inkey pass.pem -in pass.pem -certfile AppleWWDRCA.pem -name "Company Name" -out codesign.p12 -passout pass:
+   ```
+
+1. Before finishing, we need to note down your Team ID:
+
+   ```shell
+   openssl pkcs12 -in codesign.p12 -nodes | grep OU
+   ```
+
+At this point, you only need the final `codesign.p12` file. We made it **not** password protected so you can use it in your CI/CD
+pipeline without having to enter a password. If you'd rather have it password protected, run the command above without `-passout pass:` at the end.
+
+## Apple's Sacred Stamp of Approval
+
+To be admitted to Apple's sacred notarization service, you need to get an App Store Connect API key.
+If you enjoy a good read from Apple go [read their documentation](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api).
+For the twitchy ones, like myself:
+
+1. Head to [API Key Creation](https://appstoreconnect.apple.com/access/integrations/api) page
+1. Click on the **+** next to **Active** at the top of the table.
+1. Enter a name like `Code Signing`
+1. Put `Developer` for the **Access** field
+1. Hit **Generate**
+1. Notice the **Download** button in the last column for the key you just created (bottom row)
+1. Download and save the key with the name `apikey.p8` next to `codesign.p12`
+1. Note the **Key ID** somewhere
+1. Note the **Issuer ID** somewhere. This is a separate section above the key table.
+1. Now let's combine all these 3 into a single JSON file so we don't have to manage them separately:
+
+   ```shell
+   rcodesign encode-app-store-connect-api-key -o codesign_key.json <issuer-id> <key-id> apikey.p8
+   ```
+
+At this point you only need the `codesign_key.json` file. This will be used for notarization.
+
+## The Entitled Apps
+
+To be able to get your app notarized, it needs to have "entitlements". This is essentially letting Apple know
+ahead of time, which sensitive APIs your application will be using. Then Apple's servers will issue a "ticket"
+for this specific version of your app and when someone tries to run it, it will be checked and restrained to
+these limitations.
+
+Since I don't have cybernetic powers, I cannot (yet) deduce which entitlements your app needs over a blog post.
+That said I can at least make a recommendation. Since I did this for fossilized Node.js applications, [I just
+copied](https://github.com/BYK/fossilize/blob/main/entitlements.plist) what Node.js used for itself.
+
+You can use this or create your own by picking and choosing from [the vast array of entitlements](https://developer.apple.com/documentation/bundleresources/entitlements)
+that Apple offers. There's also [more excellent prose](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+for those to understand deeper and follow the Apple cult even closer.
+
+At the end of this section, I'll just assume you have an `entitlements.plist` file that is
+[properly formatted](https://developer.apple.com/documentation/security/resolving-common-notarization-issues#Ensure-properly-formatted-entitlements)[^5] next to the binary
+you want to sign and notarize.
+
+## Sign here please[^6]
+
+Now that we got everything we need for signing _and_ notarization, we can get to actual business.
+Signing is quite straightforward but getting the notarization right took a few tries. Let's start with signing:
+
+```shell
+rcodesign sign --team-name <your_team_id> --p12-file codesign.p12 --for-notarization -e entitlements.plist <your_binary_path>
+```
+
+If you opted for a password-protected p12 file above, you can add `--p12-password <password>` or
+`--p12-password-file <password_file_path>` at the end of the command above.
+
+## Knock Knock Knocking on Notary's Door
+
+Now that we have a signed binary, we will get it notarized. We already got the prerequisites by using the `--for-notarization` and
+`-e entitlements.plist` parts above so we are in good hands. We still need to zip the file before though[^7].
+
+```shell
+zip app.zip <path_to_your_app>
+rcodesign notary-submit --api-key-file codesign_key.json --wait app.zip
+rm app.zip
+```
+
+## We're Done here
+
+Yup, we really are done. At this point you can start distributing the signed binary. People using a macOS should be able to use it without errors or warnings.
+If they double click on it (instead of running from a terminal), they may still see a security warning as we cannot "staple" the notarization tickets to plain binaries. To be able to do this you
+need to package your app as a `.pkg` or `.dmg` file but I wasn't (and still am not) interested in learning more Apple stuff so you'll need to figure that part out
+yourself.
+
+If you want to have this process on a CI/CD pipeline you need to remember a few things:
+
+1. Make sure you don't do signing and notarization on PR branches as that means anyone who can create a PR can generate and distribute a binary with their potentially
+   malicious changes and with _your_ signature on it.
+1. I don't think you need to password-protect your p12 file but if you are using a service like GitHub you probably cannot store files as secrets. A quick hack for
+   this is to store the `base64` encoded string versions of these 2 files (`codesign.p12` and `codesign_key.json`) as secrets. Then you
+   [`base64` decode these into their respective files](https://github.com/getsentry/spotlight/blob/4f3e34a43e5d1949f664fc8ea88f84b1050274af/.github/workflows/build.yml#L61-L65)
+   and continue business as usual.
+1. Also, don't forget to [store the _signed_ binary](https://github.com/getsentry/spotlight/blob/4f3e34a43e5d1949f664fc8ea88f84b1050274af/.github/workflows/build.yml#L96-L101) as the artifact of your build.
+
+## Resources
+
+I've used the excellent docs Gregory Szorc created for his amazing [`apple-codesign`](https://gregoryszorc.com/docs/apple-codesign)(`rcodesign`) project.
+I essentially summarized these two pages:
+
+- https://gregoryszorc.com/docs/apple-codesign/main/apple_codesign_certificate_management.html#apple-codesign-exchange-csr
+- https://gregoryszorc.com/docs/apple-codesign/main/apple_codesign_getting_started.html#apple-codesign-app-store-connect-api-key
+
+I also found [this amazing gist for creating `pkpass.p12` files](https://gist.github.com/karnauskas/f76ab849224f22fc32961288266094a2) from the GitHub user
+[karnauskas](https://gist.github.com/karnauskas) and used parts of it.
+
+Finally, I've used [this little hack from StackOverflow](https://stackoverflow.com/a/27497899/90297) for providing you with
+a command for creating password-less p12 files from the get go.
+
+[^1]: You need to scroll all the way to the bottom to see this very unimportant detail.
+[^2]: Yep, I'm being snarky.
+[^3]: First time I heard about it. I wish patience to people dealing with Apple. And no, I have no intention of learning more about this but you have that link there.
+[^4]: If you don't have `openssl` around, just search for how you can install it. Should be as easy as `<package_manager> install openssl` where `<package_manager>` is `apt` or `yum` or something akin to those.
+[^5]: Being a bit picky, are we dear Apple?
+[^6]: and here, and here, and here, and here...
+[^7]: Don't ask me why they cannot be bothered with on-the-fly zipping or HTTP content encoding etc., I don't know.
