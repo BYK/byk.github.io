@@ -84,14 +84,16 @@ and follow the steps below:
    openssl pkcs12 -export -clcerts -inkey pass.pem -in pass.pem -certfile AppleWWDRCA.pem -name "Company Name" -out codesign.p12 -passout pass:
    ```
 
+   We made our `codesign.p12` file **not** password protected so you can use it in your CI/CD pipeline without having to enter a password.
+   If you'd rather have it password protected, run the command above without `-passout pass:` at the end.
+
 1. Before finishing, we need to note down your Team ID:
 
    ```shell
    openssl pkcs12 -in codesign.p12 -nodes | grep OU
    ```
 
-At this point, you only need the final `codesign.p12` file. We made it **not** password protected so you can use it in your CI/CD
-pipeline without having to enter a password. If you'd rather have it password protected, run the command above without `-passout pass:` at the end.
+At this point, you only need the final `codesign.p12` file.
 
 ## Apple's Sacred Stamp of Approval
 
@@ -189,6 +191,12 @@ I also found [this amazing gist for creating `pkpass.p12` files][17] from the Gi
 Finally, I've used [this little hack from StackOverflow][19] for providing you with
 a command for creating password-less p12 files from the get go.
 
+## Thanks
+
+I'd like to thank my colleague [Daniel Szoke][20] for his help for establishing this entire flow and
+proof-reading this post. I should have written this _before_ he also got the pain to get `sentry-cli`
+signed but hey, better late than never, right? 😅
+
 [^1]: You need to scroll all the way to the bottom to see this very unimportant detail.
 [^2]: Yep, I'm being snarky.
 [^3]: First time I heard about it. I wish patience to people dealing with Apple. And no, I have no intention of learning more about this but you have that link there.
@@ -216,3 +224,4 @@ a command for creating password-less p12 files from the get go.
 [17]: https://gist.github.com/karnauskas/f76ab849224f22fc32961288266094a2
 [18]: https://github.com/karnauskas
 [19]: https://stackoverflow.com/a/27497899/90297
+[20]: https://github.com/szokeasaurusrex
