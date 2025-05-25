@@ -1,0 +1,119 @@
+---
+pubDate: 2025-07-01
+author: byk
+tag: taxes
+title: "The magic word: TaxYearEnd"
+intro: "An British folk story on automated payroll, income taxes, and long documents"
+slug: uk-payroll-taxes
+image: ../../assets/taxes.png
+---
+
+This blog wasn't supposed to be all horror stories but looks like life sends me quite a few recently. I've spent more than a week at the end of April
+trying to fix an incorrect tax code with my employer on record (as Sentry does not have a UK entity yet). I was able to get it fixed... but not through
+the company nor through their support team.
+
+## The Payslip
+
+It was an unusually sunny April day in south east England when I got my first payslip of the 2026 tax year. I was looking forward to this as it would
+be marking the end of a tax code that deducted extra tax from my salary and put me back onto the tax bracket and code where I was supposed to be. The
+reason for this was me switching jobs in the middle of the tax year and HMRC[^1] thinking I got a massive pay rise I wish I had but didn't.
+Thankfully, I got all that extra tax claimed back with the year-end self-assessment tax return but I digress. It was a sunny April day where I was shocked to
+find out that not only my tax code was incorrect, it was actually worse than before! I was expecting to get more money but my paycheck was actually _lower_
+than the month before 😭. I was confused at first but quickly recovered and reached out to my EOR company's support team. It was not May 1st yet so I may
+have had a chance to get it corrected before the actual bank transfer. I could have wished for world peace instead.
+
+## The Denial
+
+The initial reactions from the support team can be summarized as:
+
+1. Oh you poor entitled prick, so sad your tax code makes you pay more tax but just deal with it.
+2. Oh poor boy, you don't know taxes and you are definitely not smart enough to understand this. Just accept what it is as we are doing what we are told by HMRC.
+3. Oh, you are still here? Go figure this out with HMRC, they told us to use this tax code.
+
+I am a person who doesn't easily give up, especially when I _think_ I'm right.[^2] I have already logged into my HMRC account when I got a tax code change
+notification a few weeks ago and I was sure my tax code there was not the one I was seeing on my payslip. Nonetheless, I logged in again to see if anything
+has changed. Surprise surprise: nothing has changed. Took a screenshot, also found the tax code change letter's PDF after a long series of clicking around and shared
+these in the support thread. Response? Your proof does not prove anything, you seem to be lying and even if it did and you weren't lying, we just cannot change
+your tax code manually. Go to HMRC.
+
+## A game of letters
+
+At this point, I was fuming. Also worth mentioning that after the initial few messages, the issue was escalated to the payroll team which seems to be only able
+to respond to these messages once a day. I started digging into HMRC's self-service portal, reading up on tax codes, how they change, how they are communicated
+to your employer, and what your/my employer is responsible for. I found all the nice history and modern tech behind all this and essentially debugged my
+employer's payroll system for them. For free.
+
+Every time your tax code changes, HMRC sends a letter to you and to your employer about this change. This letter is called a P6 or a P9. The [P6][1] is sent when
+you are a new employee or when your tax code changes. The [P9][2] is sent when you are an existing employee and your tax code changes. The letter contains
+your new tax code, the effective date of the change, and a few other details[^3]. So, for my case, I got two letters: one on February 2025 and one on April 2025.
+The first one, from February, was for the coming tax year, 2026, instructing my employer to set my tax code to what I was seeing on my HMRC account. The second
+one, from April, was for the tax year that just ended (2025) and setting my tax code retroactively to the one I was seeing on my payslip. Can you see what's
+going on here?[^4]
+
+## The "fineprint"
+
+So the "fineprint" here is, to which year the letter applies to. Turns out the letter explicitly states the tax year it applies to but HMRC usually don't send
+retroactive letters. So payroll automation systems are coded to only look at the "effective date" and "tax code" fields and ignore anything else[^5]. So from
+the company's perspective, they were correct. The HMRC indeed told them to set my tax code to the one on my payslip, effective April 2025 BUT FOR THE BLOODY[^6]
+2025 TAX YEAR. The letter from February was for the 2026 tax year but it got overridden by the letter that came in April.
+
+After discovering this entire kerfuffle, I documented and explained all of it to the support team. Demanded my tax code to be fixed ASAP, their payroll system
+checked and fixed, and my money returned. And of course they complied and we all lived happily ever after under the rainbows from the unicorns living in the
+beautiful British countryside.[^7]
+
+## Being practical
+
+What I got in response was still the same: the system was automated, their system showing that the tax code must be changed to the incorrect one effective
+April 2025, and if I have a problem with that I should contact HMRC to change my tax code. I was furious at this point, creating a local sun which caused
+the heatwave we had here in the UK in May. Before digging deeper though, I decided to stop the bleeding. I called HMRC, explained the situation briefly, and
+asked whether I can get another P6 issued. And unlike the other side of the story, what I got was a few cheerful clicks and "done, we issued a new P6".[^8]
+
+## The depth of the rabbit hole
+
+Armed with the calmness of my **new&improved™** tax code and the knowledge of the electrons and photons carrying that new P6 letter's contents being on their way to
+my employer's &lt;insert expletive here> payroll system, I started digging for this "electronic PAYE system". After a short period of Googling, I found out
+about the "Data Provisioning Service" (DPS) and HMRC API. The DPS is the "electronic PAYE system" that HMRC uses to send tax code changes to employers. That mythical
+thing I've been looking for! As usual with things related to big organizations, it was architected around SOAP and XML with a [very long specification document][3].
+That said, as expected from an accountable and transparent organization, there is plenty of public documentation and tooling. If you have a special interest in
+overly long and complex specifications, I highly recommend reading [all the documents and checking out the tooling][4].
+
+Although I didn't have this special interest, I did have the interest of [proving someone wrong][5].[^9] Upon reading these, I discovered the awesome
+[Outgoing XML Generator][6] or OXG 4.5 as it is known among friends. This is an ugly tool written in Java that can generate the XML payloads that
+HMRC sends to employers. After some more digging I was able to generate a sample P6 message to test. And wouldn't you know, it had this `TaxYearEnd` field in it!
+Upong seeing this, I asked for the "raw" data of this message from the payroll team. It took them long enough to provide it but they finally did. And guess what?
+The `TaxYearEnd` field was indeed set to `2025` vindicating my theory that the payroll system was the faulty part here. I nobly relayed this information back to the
+support agent to be passed to the payroll team, with full confidence that they now will apologize, fix the issue, and investigate their systems.
+
+Instead, I just validated all those people who called me naive for all these years. The support agent came back with the stale old "we are sorry but we cannot change
+your tax code" response without admitting to any wrongdoing on their part. Lucky for me, I already got that new P6 issued so instead of creating another heatwave, I
+just sat down, looked at my screen in disbelief. Disbelief that not only such organizations can exist but they make a lot of money along the way.
+
+## Conclusion
+
+The month turned to June, I got my new payslip with the correct tax code along with all the extra tax I paid returned to me. Staring into the distance, I then sat down
+to write this blog post which turned out to be a guide in implementing a payroll system that interfaces with HMPC's DPS. In hindsight, I think I should have just called
+the HMRC for a new P6 as that was the solution in the end. That said I don't regret all the research I did and things I've learned. I only regret the anxiety and stress
+during the period.
+
+Anyway, if you ever implement that payroll system, please make sure to honor the `TaxYearEnd` field in the P6 messages.
+
+Thanks,
+
+A friend.
+
+[^1]: The UK tax authority: Her/His Majesty's Revenue & Customs -- for some reason I thought this was Her Majesty's Revenue Chest but turns out I was wrong. Still way cooler than _Internal Revenue Service_.
+[^2]: People who know me IRL are nodding in agony right now. Hey, I'm sorry. We don't get to choose our personality traits.
+[^3]: Turns out the devil was hidden in a specific detail here. Oh I'm not spoiling it, keep reading please ☝🏻
+[^4]: Don't just read on, just think a bit. I can wait. Since this is a text that's already written it doesn't really cost any extra. Seriously, I can wait till the heat death of the universe. Okay okay, let's get back?
+[^5]: Well, they don't ignore to _whom_ the letter applies to obviously 😅
+[^6]: Oh yes, I lived in the UK enough to start using _bloody_ instead of the f-word. Just in writing for now.
+[^7]: Just in case you haven't noticed, this is sarcasm. And if you haven't for reals, maybe you should read something else?
+[^8]: And a P6 that has an even "better" tax code for me!
+[^9]: That someone being my employer's payroll system, and the stakes being me overtaxed for a year definitely played a role here.
+
+[1]: https://www.gov.uk/employee-tax-codes/changes
+[2]: https://www.gov.uk/government/publications/p9x-tax-codes
+[3]: https://assets.publishing.service.gov.uk/media/5c0a74aaed915d0b7268ee2a/DPS.pdf
+[4]: https://www.gov.uk/government/publications/paye-internet-submissions-outgoing-data-provisioning-service-technical-specifications
+[5]: https://xkcd.com/386/
+[6]: https://www.gov.uk/government/publications/paye-internet-submissions-outgoing-data-provisioning-service-outgoing-xml-generator
