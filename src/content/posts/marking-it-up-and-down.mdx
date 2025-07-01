@@ -1,0 +1,181 @@
+---
+pubDate: 2025-07-02
+author: byk
+tag: ai
+title: Marking it Up (and Down)
+intro: How we added markdown versions of all 8754 pages on Sentry Docs (and keep going)
+slug: marking-it-up-and-down
+image: ../../assets/robodown.jpg
+---
+
+## First, there was plain text
+
+When I first learned about [Markdown][1], I was a bit skeptical. Why use _weird_ punctuation when you can use HTML instead? But as I started using it more,
+especially on forums etc, I realized the power of it. Unlike HTML, it was way more accessible and easier to type. Even more importantly, it was still readable
+and expressed meaning without obstructing the text before rendering. And slowly but surely, all major platforms, [including WhatsApp][2] adopted it.
+
+## The Age of AI
+
+And then ChatGPT happened.
+Due to the properties I listed above, Markdown was the perfect format for LLMs too. Once the agents hit the scene, they started generating Markdown
+formatting and they were also more than happy to ingest Markdown formatted text for their context. There was only one problem though: the web revolved around
+HTML, and some of that being dynamically generated. Even if you could teach or extract HTML, the dynamic JS part of it is still a challenge and usually requires
+a full browser environment. Sure, there's [Playwright MCP][3] but it's slow and resource-intensive. These issues lead to the creation of services like [Firecrawl][4]
+which I think is awesome, especially when you cannot control the source of the information.
+
+Recently, with a lot of ~~push~~ help from [David][5], I started learning about agentic flows and how to use LLMs more than generating 0-shot responses[^1]. I wanted
+to write a bit about these too but [Colin Eberhardt][6] already did a great job with [Re-implementing LangChain in 100 lines of code][7]. This is the article that made
+it _click_ for me. Once I read it, I even felt a bit silly for expecting something more complex. It's deceptively simple: you use the LLM in a loop, parse the responses
+to trigger "tools", and feed the results back (part of the loop) until you reach a final result (or the limit of your wallet). Anyway, great article, definitely go read
+it. Anyway, let's go back to talking about Markdown and its cousins as this is a blog post about that, not LLMs.
+
+## Walking back from the X-factor
+
+For my new internal project, I needed to use [our docs][8]. Although they were already authored in MDX, it was not pure Markdown. We _can_ strip the MDX parts but Sentry
+Docs are architected to share certain parts of the content between different pages. This means we actually have to render the MDX to get the full content. As a person who
+spent some time around parsing out dependencies, building a dependency graph and working over it I had no interest in going down that path unless I really had to. So I
+decided to look for an existing "HTML to Markdown" solution. This lead me to the awesome [rehype-remark][9] package which is a part of the [unified][10] project. I was
+already quite familiar with unified and [remark][11] which we also used in our docs rendering pipeline. So I simply jumped on this. My initial solution was simply to fetch
+the page of interest, convert it into markdown, find the relevant header and extract the contents until the next header. [The code][12] was also simple:
+
+```ts
+import type { Root, Heading } from "mdast";
+import rehypeParse from "rehype-parse";
+import rehypeRemark from "rehype-remark";
+import remarkStringify from "remark-stringify";
+import { unified } from "unified";
+
+function extractMDSection({ section }: { section?: RegExp }) {
+  return (tree: Root) => {
+    const headingIdx = tree.children.findIndex((node) => {
+      return (
+        node.type === "heading" &&
+        node.children[0] &&
+        node.children[0].type === "link" &&
+        section?.test(node.children[0].url)
+      );
+    });
+    const heading = tree.children[headingIdx] as Heading;
+    const nextHeadingIdx = tree.children.findIndex(
+      (node, idx) =>
+        idx > headingIdx &&
+        node.type === "heading" &&
+        node.depth === heading.depth
+    );
+    tree.children = tree.children.slice(
+      headingIdx,
+      nextHeadingIdx === -1 ? undefined : nextHeadingIdx
+    );
+
+    return tree;
+  };
+}
+
+export const getWebpageAsMarkdown = async (url: string, section?: RegExp) => {
+  const response = await fetch(url);
+  const text = await response.text();
+  return String(
+    await unified()
+      .use(rehypeParse)
+      .use(rehypeRemark)
+      .use(extractMDSection, { section })
+      .use(remarkStringify)
+      .process(text)
+  );
+};
+```
+
+## Putting it everywhere, and fast
+
+Then [`/llms.txt`][13] happened. All players in the field who wanted to be more useful in the "age of AI"[^2] started publishing their content accessible to LLMs, in plain text or more
+commonly, Markdown format. Then a convention emerged: if you add `.md` at the end of the URL you may get lucky and get the Markdown version of that page. I'm not sure when this kind of
+convention started but it reminded me of the `.patch` trick that [GitHub offers for their PRs][14]. We wanted this for Sentry Docs! The first approach was to do this on the fly on a
+specific route. Not only this proved tricky to implement in NextJS, what our docs are built in, it also had an efficiency problem. Since we cannot go directly from MDX to Markdown,
+we had to render the HTML from MDX first and then convert it to Markdown, essentially doubling the work. A nice trick [Cody][15] came up with was building the Markdown versions from
+the static HTML files that NextJS generates during pre-rendering, putting them under the `public` directory, and adding a `rewrite` rule to NextJS to serve them when the `.md` extension
+is requested. This worked beautifully but created another issue: we had to generate the Markdown files for all 8754 pages in Sentry Docs and doing this takes a lot of time, up to 6-7 minutes.
+
+For a one-off job, spending several minutes is completely acceptable. But for a CI job that runs on every single commit, it is unacceptable. So I reached for the 2 very old tricks used in every
+build pipeline: caching and parallelization. The script for Markdown generation was refactored to spawn multiple [NodeJS Worker Threads][16] for parallelization. Then I also added a very naive
+cache which got the MD5 hash of the source HTML file and created a cache file with that name containing the converted Markdown. This allowed me to just do a `cp` operation if the source file
+did not change. These worked great on my local environment. The parallelization cut down the processing time by about 6x on my 16-core machine and the caching reduced that time by another 10x.
+However, when I pushed this to Vercel, our hosting platform for Sentry Docs, it was still _very_ slow. Looking carefully at the build logs I noticed 2 issues:
+
+1. Vercel build machines usually had 2 or 4 cores, significantly lower than 16.
+2. The cache was not being used at all!
+
+Solving the first one was not possible. During my tuning (local and on CI), I discovered we needed about half of the available cores due to the CPU & I/O intensive nature of the task:
+
+```ts
+// On a 16-core machine, 8 workers were optimal (and slightly faster than 16)
+const numWorkers = Math.max(Math.floor(cpus().length / 2), 2);
+```
+
+Then I started investigating the cache issue and after several hours of digging, I finally realized what was going on. NextJS creates a new "signing secret" for every build which also affects
+the file names of the JS files it generates as the names are created from file contents. This then causes the HTML files' MD5 hashes to change although their actual contents were the same. To
+overcome this in a cheap manner I had to strip the `<script>` tags (along with their contents) from the HTML files before hash calculation and processing:
+
+```ts
+const text = (await readFile(source, { encoding: "utf8" }))
+  // Remove all script tags, as they are not needed in markdown
+  // and they are not stable across builds, causing cache misses
+  .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+```
+
+Surprisingly, this also reduced the processing time by about 2x as the HTML files were significantly smaller without the `<script>` tags.
+
+We also started uploading these to a special Cloudflare R2 bucket for RAG processing that [David started using for a much better search experience][20].
+
+## Can't Stop the Feeling!
+
+Once I get into optimization mode, I cannot stop until I hit a very hard wall or actually get every ounce of optimization implemented. So I started looking at other places where I can use the
+same old tricks of caching and parallelization. Turns out our MDX pipeline was not only uncached, it was also mostly using the `sync` version of the file system APIs in NodeJS. So I made every
+single file system operation async, used `Promise.all` to parallelize them and got a huge speed increase. That is until this was shipped to Vercel. This time, it was the "dynamic pages" which
+used [Vercel Functions][17] that caused crashes. These were crashing with an `EMFILE` file error, indicating that the file descriptor limit was reached. On hindsight, this is very obvious but
+back at the time I had to dig around as these were not happening locally. It first looked like a silly limitation in AWS Lambda, which is what Vercel Functions are based on, but it turned out
+to be a legitimate issue as with the top level `Promise.all`, I was creating all 8600+ promises all at once, which themselves triggered more open file handlers. Again, obviously this is insane
+so another old friend, [`p-limit`][18][^3], came to the rescue. With a limit of 200 concurrent promises, we sailed on smoothly.
+
+## Tying it all together
+
+It took about 2 weeks and 12 PRs to tie all loose ends but now not only we have `.md` versions of every single page in Sentry Docs, we also have better RAG-based search (still in-progress), and
+faster builds (from ~16 minutes down to ~11 minutes). I love these kinds of intense periods where I can focus on a few high-impact things and just punch them out. Hopefully, there will be some
+more in the coming weeks and months. Here's a list of the important PRs we made to get here:
+
+- [feat(ai): Add .md extension to provide pages in markdown for LLMs][21]
+- [ci(md): Add caching to md-export script][22]
+- [ci(build): Parallelize and cache mdx pipeline - fix md cache][23]
+- [ci(md): Upload md files to R2][24]
+- [feat(md): Use page title as the top level title][25]
+- [feat(md): Rewrite URLs to be absolute and to .md versions][26]
+
+[^1]: These are nothing short of amazing but without the agent loop and with 0-shot approaches, they are not very useful for the tasks I have at hand.
+[^2]: Yup, let's cringe together.
+[^3]: Btw, I still refuse to believe [Sindre Sorhus][19] is a real person. That is alien-level productivity and reach 🙇🏻‍♂️
+
+[1]: https://daringfireball.net/projects/markdown/
+[2]: https://faq.whatsapp.com/539178204879377/?cms_platform=web&locale=en_US
+[3]: https://github.com/microsoft/playwright-mcp
+[4]: https://www.firecrawl.dev/
+[5]: https://cra.mr/
+[6]: https://blog.scottlogic.com/ceberhardt/
+[7]: https://blog.scottlogic.com/2023/05/04/langchain-mini.html
+[8]: https://docs.sentry.io/
+[9]: https://github.com/rehypejs/rehype-remark
+[10]: https://unifiedjs.com/
+[11]: https://github.com/remarkjs/remark
+[12]: https://gist.github.com/BYK/d8b9bdba5d1ea9bc12fdfb2157d93854
+[13]: https://llmstxt.org/
+[14]: https://github.com/getsentry/sentry-docs/pull/13994.patch
+[15]: https://github.com/codyde
+[16]: https://nodejs.org/api/worker_threads.html
+[17]: https://vercel.com/docs/functions/runtimes/node-js
+[18]: https://github.com/sindresorhus/p-limit
+[19]: https://github.com/sindresorhus
+[20]: https://x.com/zeeg/status/1938619824751653303
+[21]: https://github.com/getsentry/sentry-docs/pull/13994
+[22]: https://github.com/getsentry/sentry-docs/pull/14096
+[23]: https://github.com/getsentry/sentry-docs/pull/14109
+[24]: https://github.com/getsentry/sentry-docs/pull/14171
+[25]: https://github.com/getsentry/sentry-docs/pull/14193
+[26]: https://github.com/getsentry/sentry-docs/pull/14196
