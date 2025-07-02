@@ -95,7 +95,7 @@ we had to render the HTML from MDX first and then convert it to Markdown, essent
 the static HTML files that NextJS generates during pre-rendering, putting them under the `public` directory, and adding a `rewrite` rule to NextJS to serve them when the `.md` extension
 is requested. This worked beautifully but created another issue: we had to generate the Markdown files for all 8754 pages in Sentry Docs and doing this takes a lot of time, up to 6-7 minutes.
 
-For a one-off job, spending several minutes is completely acceptable. But for a CI job that runs on every single commit, it is unacceptable. So I reached for the 2 very old tricks used in every
+For a one-off job, spending several minutes is more than OK. But for a CI job that runs on every single commit, it is completely unacceptable. So I reached for the 2 very old tricks used in every
 build pipeline: caching and parallelization. The script for Markdown generation was refactored to spawn multiple [NodeJS Worker Threads][16] for parallelization. Then I also added a very naive
 cache which got the MD5 hash of the source HTML file and created a cache file with that name containing the converted Markdown. This allowed me to just do a `cp` operation if the source file
 did not change. These worked great on my local environment. The parallelization cut down the processing time by about 6x on my 16-core machine and the caching reduced that time by another 10x.
@@ -124,17 +124,22 @@ const text = (await readFile(source, { encoding: "utf8" }))
 
 Surprisingly, this also reduced the processing time by about 2x as the HTML files were significantly smaller without the `<script>` tags.
 
-We also started uploading these to a special Cloudflare R2 bucket for RAG processing that [David started using for a much better search experience][20].
+We also started uploading these to a special Cloudflare R2 bucket for RAG processing that [David started using for a much better search experience][17].
 
 ## Can't Stop the Feeling!
 
 Once I get into optimization mode, I cannot stop until I hit a very hard wall or actually get every ounce of optimization implemented. So I started looking at other places where I can use the
 same old tricks of caching and parallelization. Turns out our MDX pipeline was not only uncached, it was also mostly using the `sync` version of the file system APIs in NodeJS. So I made every
 single file system operation async, used `Promise.all` to parallelize them and got a huge speed increase. That is until this was shipped to Vercel. This time, it was the "dynamic pages" which
-used [Vercel Functions][17] that caused crashes. These were crashing with an `EMFILE` file error, indicating that the file descriptor limit was reached. On hindsight, this is very obvious but
+used [Vercel Functions][18] that caused crashes. These were crashing with an `EMFILE` file error, indicating that the file descriptor limit was reached. On hindsight, this is very obvious but
 back at the time I had to dig around as these were not happening locally. It first looked like a silly limitation in AWS Lambda, which is what Vercel Functions are based on, but it turned out
 to be a legitimate issue as with the top level `Promise.all`, I was creating all 8600+ promises all at once, which themselves triggered more open file handlers. Again, obviously this is insane
-so another old friend, [`p-limit`][18][^3], came to the rescue. With a limit of 200 concurrent promises, we sailed on smoothly.
+so another old friend, [`p-limit`][19][^3], came to the rescue. With a limit of 200 concurrent promises, we sailed on smoothly.
+
+Then I moved on to the caching bit which turned out to be a bit more tricky. We are using this other awesome package called [`mdx-bundler`][21]. It takes in an MDX file, discovers all its
+dependencies, and bundles them together into a single JS file. Easy peasy, right? Just cache the output based on the input MD5 and we're good! Well, almost. The catch is we ask the bundler to
+emit the assets (mostly images) into a separate folder. This means we also need to cache these assets too. The solution became a file _and_ a directory, using the cache key as their names[^4]
+where we copy everything in place when we find them. This chopped another 3-4 minutes off the build time when only few files changed, which is the common case.
 
 ## Tying it all together
 
@@ -142,16 +147,17 @@ It took about 2 weeks and 12 PRs to tie all loose ends but now not only we have 
 faster builds (from ~16 minutes down to ~11 minutes). I love these kinds of intense periods where I can focus on a few high-impact things and just punch them out. Hopefully, there will be some
 more in the coming weeks and months. Here's a list of the important PRs we made to get here:
 
-- [feat(ai): Add .md extension to provide pages in markdown for LLMs][21]
-- [ci(md): Add caching to md-export script][22]
-- [ci(build): Parallelize and cache mdx pipeline - fix md cache][23]
-- [ci(md): Upload md files to R2][24]
-- [feat(md): Use page title as the top level title][25]
-- [feat(md): Rewrite URLs to be absolute and to .md versions][26]
+- [feat(ai): Add .md extension to provide pages in markdown for LLMs][22]
+- [ci(md): Add caching to md-export script][23]
+- [ci(build): Parallelize and cache mdx pipeline - fix md cache][24]
+- [ci(md): Upload md files to R2][25]
+- [feat(md): Use page title as the top level title][26]
+- [feat(md): Rewrite URLs to be absolute and to .md versions][27]
 
 [^1]: These are nothing short of amazing but without the agent loop and with 0-shot approaches, they are not very useful for the tasks I have at hand.
 [^2]: Yup, let's cringe together.
-[^3]: Btw, I still refuse to believe [Sindre Sorhus][19] is a real person. That is alien-level productivity and reach 🙇🏻‍♂️
+[^3]: Btw, I still refuse to believe [Sindre Sorhus][20] is a real person. That is alien-level productivity and reach 🙇🏻‍♂️
+[^4]: Well, they cannot be the same name as you cannot have a file and a directory with the same name in the same place. So I just added a suffix to the file name.
 
 [1]: https://daringfireball.net/projects/markdown/
 [2]: https://faq.whatsapp.com/539178204879377/?cms_platform=web&locale=en_US
@@ -169,13 +175,14 @@ more in the coming weeks and months. Here's a list of the important PRs we made 
 [14]: https://github.com/getsentry/sentry-docs/pull/13994.patch
 [15]: https://github.com/codyde
 [16]: https://nodejs.org/api/worker_threads.html
-[17]: https://vercel.com/docs/functions/runtimes/node-js
-[18]: https://github.com/sindresorhus/p-limit
-[19]: https://github.com/sindresorhus
-[20]: https://x.com/zeeg/status/1938619824751653303
-[21]: https://github.com/getsentry/sentry-docs/pull/13994
-[22]: https://github.com/getsentry/sentry-docs/pull/14096
-[23]: https://github.com/getsentry/sentry-docs/pull/14109
-[24]: https://github.com/getsentry/sentry-docs/pull/14171
-[25]: https://github.com/getsentry/sentry-docs/pull/14193
-[26]: https://github.com/getsentry/sentry-docs/pull/14196
+[17]: https://x.com/zeeg/status/1938619824751653303
+[18]: https://vercel.com/docs/functions/runtimes/node-js
+[19]: https://github.com/sindresorhus/p-limit
+[20]: https://github.com/sindresorhus
+[21]: https://github.com/kentcdodds/mdx-bundler
+[22]: https://github.com/getsentry/sentry-docs/pull/13994
+[23]: https://github.com/getsentry/sentry-docs/pull/14096
+[24]: https://github.com/getsentry/sentry-docs/pull/14109
+[25]: https://github.com/getsentry/sentry-docs/pull/14171
+[26]: https://github.com/getsentry/sentry-docs/pull/14193
+[27]: https://github.com/getsentry/sentry-docs/pull/14196
