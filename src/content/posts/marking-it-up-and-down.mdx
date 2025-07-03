@@ -20,7 +20,7 @@ And then ChatGPT happened.
 Due to the properties I listed above, Markdown was the perfect format for LLMs too. Once the agents hit the scene, they started generating Markdown
 formatting and they were also more than happy to ingest Markdown formatted text for their context. There was only one problem though: the web revolved around
 HTML, and some of that being dynamically generated. Even if you could teach or extract HTML, the dynamic JS part of it is still a challenge and usually requires
-a full browser environment. Sure, there's [Playwright MCP][3] but it's slow and resource-intensive. These issues lead to the creation of services like [Firecrawl][4]
+a full browser environment. Sure, there's [Playwright MCP][3] but it's slow and resource-intensive. These challenges gave birth to services like [Firecrawl][4]
 which I think is awesome, especially when you cannot control the source of the information.
 
 Recently, with a lot of ~~push~~ help from [David][5], I started learning about agentic flows and how to use LLMs more than generating 0-shot responses[^1]. I wanted
@@ -133,8 +133,8 @@ same old tricks of caching and parallelization. Turns out our MDX pipeline was n
 single file system operation async, used `Promise.all` to parallelize them and got a huge speed increase. That is until this was shipped to Vercel. This time, it was the "dynamic pages" which
 used [Vercel Functions][18] that caused crashes. These were crashing with an `EMFILE` file error, indicating that the file descriptor limit was reached. In hindsight, this is very obvious but
 back at the time I had to dig around as these were not happening locally. It first looked like a silly limitation in AWS Lambda, which is what Vercel Functions are based on, but it turned out
-to be a legitimate issue as with the top level `Promise.all`, I was creating all 8600+ promises all at once, which themselves triggered more open file handlers. Again, obviously this is insane
-so another old friend, [`p-limit`][19][^3], came to the rescue. With a limit of 200 concurrent promises, we sailed on smoothly.
+to be a legitimate issue. With the top level `Promise.all`, I was creating all 8600+ promises at once, which themselves triggered more open file handles. Again, obviously this is insane
+so I reached out to another old friend: [`p-limit`][19][^3]. With a limit of 200 concurrent promises, we sailed on smoothly.
 
 Then I moved on to the caching bit which turned out to be a bit more tricky. We are using this other awesome package called [`mdx-bundler`][21]. It takes in an MDX file, discovers all its
 dependencies, and bundles them together into a single JS file. Easy peasy, right? Just cache the output based on the input MD5 and we're good! Well, almost. The catch is we ask the bundler to
