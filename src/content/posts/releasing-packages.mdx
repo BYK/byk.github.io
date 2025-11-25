@@ -1,0 +1,149 @@
+---
+pubDate: 2025-11-25
+author: byk
+tag: automation
+title: 'Releasing Packages with a Valet Key: npm, PyPI, and beyond'
+intro: How we built a secure, auditable, and low-friction release system at Sentry
+slug: releasing-packages
+image: ../../assets/github-valet.jpg
+---
+
+_Disclaimer: This post should have been written about 5 years ago but I never got around to it; with the most recent [Shai-Hulud attack][2], I thought it would be a good time to finally check this off the list and hopefully help others avoid supply-chain attacks._
+
+About 5 years ago, I sat in on a meeting at Sentry in the midst of their SOC 2 compliance efforts. There was [Armin][1], telling us that we needed a secret storage service for our package repository tokens. The tokens we used to deploy Sentry SDKs to package repositories such as npm, PyPI etc. This was to ensure there were no unauthorized releases of our SDKs which were embedded into all Sentry customers' products. There were a limited set of people who had access to these tokens back in the time. Now, they became the bottleneck for more and more frequent releases. There was also the auditability issue at hand: releases were performed from individuals' workstations and there was no easy way to trace a release back to where it originated from or whether it was authorized or not.
+
+For some reason I intuitively was against such a secret storage service and felt like the answer was somewhere in GitHub, GitHub Actions, and their secret storage service we already used. We already had the repo permissions, personnel structure, and all the visibility for auditing there. Heck, even the approval mechanics were there with pull requests. So I said "give me a week and I'll get you a proof of concept" which Armin did and I delivered - though I think it took a bit more than a week 😅
+
+## Secrets in Plain Sight
+
+Before we dive into the solution, let me paint a picture of the problem. Publishing packages to registries like npm, PyPI, or crates.io requires access tokens. These tokens are essentially the keys to the kingdom - whoever has them can publish anything under your organization's name. At the time, these tokens were either distributed to select individuals, or lived in GitHub repository secrets, accessible to anyone with write access to the repository.[^1]
+
+Now, here's the scary part: at Sentry, we had 90-100+ engineers with commit rights to our SDK repositories. Any one of them could:
+
+1. Create a new workflow or modify an existing one
+2. Access these secrets within that workflow
+3. Exfiltrate them to any web service they controlled
+4. Do all of the above without triggering any alarms
+
+And the truly terrifying bit? Even if someone _did_ steal these tokens, there would be no indication whatsoever. No alerts, no logs, nothing. They could sit on these credentials and use them months later, long after they've left the company. We've seen this exact scenario play out recently with supply-chain attacks like the [Shai-Hulud npm takeover][2] where attackers compromised maintainer accounts to publish malicious versions of popular packages.
+
+## The Valet Key
+
+Some fancy cars come with a "valet key" - a special key you give to parking attendants or car wash folks. Unlike your regular key, this one has limited capabilities: maybe it can only go up to 20mph, can't open the trunk, or won't let you disable the alarm. It's the same car, but with reduced privileges for reduced risk of theft.
+
+This concept maps beautifully to our problem. Instead of giving everyone the full keys (the publishing tokens), why not give them a way to _request_ the car to be moved (a release be made)? The actual keys stay with a very small, trusted (and monitored) group who are the builders and maintainers of the infrastructure. Even the approvers don't actually have access to the keys!
+
+Here's what we wanted:
+
+1. **Secrets in a secure, limited-access location** - only 3-4 release engineers should have access
+2. **Clear approval process** - every release needs explicit sign-off from authorized personnel
+3. **Low friction for developers** - anyone should be able to _request_ a release easily
+4. **Full audit trail** - everything logged being compliance-friendly
+5. **No new infrastructure** - we didn't want to build or maintain a separate secrets service
+
+As a side note, trusted publishing through OIDC and OAuth with limited and very short-lived tokens is the _actual_ digital equivalent of valet keys. npm is slowly rolling this out[^2], but at the time we built this system, it wasn't an option. And even today, it's not available at the organization/scope level which is what we'd need. Also, we publish way more places than npm so we need a more generic solution.
+
+Another approach worth mentioning is Google's [Wombat Dressing Room][6] - an npm registry proxy that funnels all publishes through a single bot account with 2FA enabled. It's a clever solution if you're npm-only and want something off-the-shelf. That said it still requires running a separate service.[^3]
+
+## Enter getsentry/publish
+
+The solution we landed on is beautifully simple in hindsight: a [separate repository][3] dedicated entirely to publishing. Here's the trick:
+
+- **Write access is extremely limited** - only 3-4 release engineers can actually modify the repo
+- **Release managers get "triage" access** - GitHub's triage role lets you manage issues and labels, but not code - perfect for approving releases
+- **Everyone else can create issues** - that's all you need to request a release
+- **Approval happens via labels** - a release manager adds the "accepted" label to trigger the actual publish
+
+The beauty of this setup is that the publishing tokens live _only_ in this repo's secrets. The repo itself is mostly static - we rarely need to modify the actual code - so the attack surface is minimal.
+
+## The Implementation (with Craft)
+
+Under the hood, we use [Craft][4], our CLI tool for managing releases. Craft was designed with a crucial architectural decision that predates the publish repo: it separates releases into two distinct phases - **prepare** and **publish**.
+
+The **prepare** phase is where all the "dangerous" work happens: `npm install`, build scripts, test runs, changelog generation. This phase runs in the SDK repository _without_ any access to publishing tokens. The resulting artifacts are uploaded to GitHub as, _well_, build artifacts.
+
+The **publish** phase simply downloads these pre-built artifacts and pushes them to the registries. No `npm install`, no build scripts, no arbitrary code execution - just download and upload. This dramatically reduces the attack surface during the privileged publishing step. Even if an attacker managed to inject malicious code into a dependency, it would only execute during the prepare phase which has no access to publishing credentials.
+
+This two-phase architecture is what makes supply-chain attacks like [Shai-Hulud][2] much harder to pull off against Sentry's SDKs. The malicious code would need to somehow persist through the artifact upload/download cycle and execute during a phase that deliberately runs no code.
+
+The magic happens with our GitHub Actions setup:
+
+1. **Developer triggers release workflow** in their SDK repo (e.g., [`sentry-javascript`][8])
+2. **[`action-prepare-release`][7]** runs `craft prepare`: creates the release branch, updates changelogs, builds artifacts, uploads them to GitHub
+3. **An issue is automatically created** in `getsentry/publish` with all the details: what changed, what's being released, which targets
+4. **Release manager reviews and approves** by adding the "accepted" label
+5. **Publishing workflow triggers** `craft publish`: downloads artifacts from GitHub and pushes to npm, PyPI, crates.io, etc. - no build step, just upload
+
+## Fighting Overprotective Parents
+
+GitHub, bless their security-conscious hearts, put up quite a few guardrails that we had to work around. Here's where things got... creative:
+
+**The Token Trigger Problem**: For the automation, we had to use the [Sentry Release Bot][5], a GitHub App that generates short-lived tokens. This is crucial because `GITHUB_TOKEN` (default token GitHub Actions creates) has a security restriction: actions triggered by it don't trigger other actions[^4]. We needed workflows in `getsentry/publish` to trigger based on issues created from SDK repos, so we had to work around this.
+
+**The Admin Bot Account**: We needed a bot that could commit directly to protected branches. GitHub's branch protection rules ~~are~~ were all-or-nothing - you can't say "this bot can commit, but only to update `CHANGELOG.md`". So our bot ended up with admin access on all repos. Not ideal, but necessary[^5].
+
+**Composite Actions and Working Directories**: If you've ever tried to use GitHub's composite actions with custom working directories, you know the pain. There's no clean way to say "run this composite action from this subdirectory". We ended up with various hacks involving explicit `cd` commands and careful path management.
+
+**Some More _Creative_ Workarounds**: We maintain a small collection of ugly-but-necessary workarounds in our action definitions. They're not pretty, but they work. Sometimes pragmatism beats elegance[^6].
+
+## Happily Ever After
+
+After all this work, what did we actually achieve?
+
+- **Compliance-friendly** ✓ - every release is logged, approved, and traceable
+- **Centralized secrets** - tokens live in one place, accessible to very few
+- **Developer convenience** - anyone can request a release with a few clicks
+- **Enterprise security** - no individual has publishing credentials on their machine
+- **Full transparency** - the entire [publish repo][3] is open, notifications enabled for stakeholders
+
+We've made more than **6,000 releases** through this system and happily counting upwards. Every single one is traceable: who requested it, who approved it, what changed, when it shipped.
+
+## Why This Matters Today
+
+Recent supply-chain attacks like [Shai-Hulud][2] show exactly why this architecture matters. When attackers compromise a maintainer's npm account, they can publish malicious versions of packages that millions of developers will automatically install. With our system:
+
+- No individual at Sentry has npm/PyPI/crates.io credentials on their machine
+- Every release requires explicit approval from a release manager
+- The approval happens in a public repo with full audit trail
+- Any suspicious activity would be immediately visible
+
+Is it perfect? No. Could a determined attacker with inside access still cause damage? Probably. But we've dramatically reduced the attack surface and made any compromise immediately visible and auditable.
+
+## Closing Thoughts
+
+Looking back, this is one of my proudest achievements at Sentry. It's not flashy - no one's going to write a blog post titled "Revolutionary New Way to Click a Label" - but it's the kind of infrastructure that quietly makes everything more secure and more convenient at the same time.[^7]
+
+If you're dealing with similar challenges, I encourage you to check out [getsentry/publish][3] and the [Craft][4]. The concepts are transferable even if you don't use our exact implementation.
+
+And hey, it only took me 5 years to write about it. Better late than never, right? 😅
+
+## Thanks
+
+I'd like to thank the following people:
+
+- [Armin][1] and [Daniel][10] for their trust and support in building this system.
+- [Kamil][11] for Craft as I knew it.
+- [Jeffery][12] for reviewing this post thoroughly and being my partner in crime for many things security at Sentry.
+- [Michael][13] for giving me the push I needed to write this post, coming up with the awesome post image idea, and for his support and guidance on the post itself.
+
+[^1]: This was before GitHub introduced "environment secrets" which allow more granular access control. Even with those, the problem isn't fully solved for our use case.
+[^2]: npm has OIDC support for individual packages, but not yet at the organization or scope level. See [npm's trusted publishers documentation](https://docs.npmjs.com/trusted-publishers).
+[^3]: If only someone could make this run directly in GitHub Actions...
+[^4]: This is actually a smart security feature - imagine a workflow that creates a commit that triggers itself. Infinite loop, infinite bills, infinite sadness.
+[^5]: This is now fixed with special [by-pass rules via rule sets][9] recently and we also no longer have admin access for the bots, phew.
+[^6]: If you peek at the repo, you'll see what I mean. I'm not proud of all of it, but I'm proud it works.
+[^7]: Especially while "security means more friction" is still a thing.
+
+[1]: https://lucumr.pocoo.org/
+[2]: https://socket.dev/blog/shai-hulud-strikes-again-v2
+[3]: https://github.com/getsentry/publish
+[4]: https://github.com/getsentry/craft
+[5]: https://github.com/apps/sentry-release-bot
+[6]: https://github.com/GoogleCloudPlatform/wombat-dressing-room
+[7]: https://github.com/getsentry/action-prepare-release
+[8]: https://github.com/getsentry/sentry-javascript
+[9]: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository?search-overlay-input=ruleset+exception&search-overlay-ask-ai=true#granting-bypass-permissions-for-your-branch-or-tag-ruleset
+[10]: https://danielgriesser.com/
+[11]: https://kamilogorek.com/
+[12]: https://jeffreyhung.com/
+[13]: https://bsky.app/profile/selviano.bsky.social
