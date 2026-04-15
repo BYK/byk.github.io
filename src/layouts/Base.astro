@@ -12,19 +12,31 @@ const { postData } = Astro.props;
 
 <head>
     <script is:inline>
-        const setDarkMode = () => {
-            if (localStorage.darkMode === 'true' || (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark')
-                localStorage.darkMode = 'true';
-            } else {
-                document.documentElement.classList.remove('dark')
-                localStorage.darkMode = 'false';
+        (function () {
+            // One-time migration from old storage format
+            if ('darkMode' in localStorage) {
+                localStorage.theme = localStorage.darkMode === 'true' ? 'dark' : 'light';
+                delete localStorage.darkMode;
             }
-        }
 
-        setDarkMode();
-        // Runs on view transitions navigation
-        document.addEventListener('astro:after-swap', setDarkMode);
+            function applyTheme() {
+                var theme = localStorage.theme;
+                var isDark = theme === 'dark' ||
+                    (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.classList.toggle('dark', isDark);
+            }
+
+            applyTheme();
+
+            // Reactive: follow OS changes when in system mode
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+            // Re-apply after View Transitions swap new <html>
+            document.addEventListener('astro:after-swap', applyTheme);
+
+            // Expose for toggle button to call after writing localStorage
+            window.__applyTheme = applyTheme;
+        })();
     </script>
 
     <meta charset="UTF-8">
