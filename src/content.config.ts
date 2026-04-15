@@ -1,7 +1,9 @@
-import { defineCollection, reference, z } from "astro:content";
+import { defineCollection, reference } from "astro:content";
+import { glob } from "astro/loaders";
+import { z } from "astro/zod";
 
 const postsCollection = defineCollection({
-  type: "content", // v2.5.0 and later
+  loader: glob({ pattern: "**/*.{md,mdx}", base: "./src/content/posts" }),
   schema: ({ image }) =>
     z.object({
       title: z.string(),
@@ -11,11 +13,12 @@ const postsCollection = defineCollection({
       author: reference("author"),
       pubDate: z.date(),
       type: z.string().optional(),
+      slug: z.string().optional(),
     }),
 });
 
 const pageCollection = defineCollection({
-  type: "content", // v2.5.0 and later
+  loader: glob({ pattern: "**/*.{md,mdx}", base: "./src/content/page" }),
   schema: ({ image }) =>
     z.object({
       title: z.string(),
@@ -26,7 +29,7 @@ const pageCollection = defineCollection({
 });
 
 const authorCollection = defineCollection({
-  type: "data", // v2.5.0 and later
+  loader: glob({ pattern: "**/*.json", base: "./src/content/author" }),
   schema: ({ image }) =>
     z.object({
       displayName: z.string(),

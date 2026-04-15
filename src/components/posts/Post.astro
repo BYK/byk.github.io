@@ -7,8 +7,9 @@ import ReadingInfo from "../../components/posts/ReadingInfo.astro";
 // default image if no image added
 import defaultImage from "../../assets/article.png";
 
+import { render } from 'astro:content';
 const isOdd = num % 2;
-const { remarkPluginFrontmatter } = await postData.render();
+const { remarkPluginFrontmatter } = await render(postData);
 ---
 <article
     class="
@@ -24,13 +25,13 @@ const { remarkPluginFrontmatter } = await postData.render();
     ">
     <div class="grid grid-cols-1 lg:grid-cols-[200px_auto] md:grid-cols-[200px_auto] gap-10 items-center">
         <div class="post_image">
-            <a href={ '/posts/' + postData.slug }>
+            <a href={ '/posts/' + postData.data.slug }>
                 <Image src={postData?.data?.image ? postData.data.image : defaultImage} width="750" alt={ postData.title + "Thumbnail"} class:list={[ 'rounded-[15px] image-shine object-cover h-[200px]', { "rotate-2": isOdd, "-rotate-2": !isOdd } ]}  />
             </a>
         </div>
         <div class="post_intro">
             <h2>
-                <a href={ '/posts/' + postData.slug } class="text-pacamara-dark hover:text-pacamara-accent">
+                <a href={ '/posts/' + postData.data.slug } class="text-pacamara-dark hover:text-pacamara-accent">
                     { postData.data.title }
                 </a>
             </h2>

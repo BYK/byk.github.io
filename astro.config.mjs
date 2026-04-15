@@ -1,5 +1,5 @@
 import { defineConfig } from "astro/config";
-import tailwind from "@astrojs/tailwind";
+import tailwindcss from "@tailwindcss/vite";
 import mdx from "@astrojs/mdx";
 import icon from "astro-icon";
 import { wordCount } from "./src/utils/word-count.mjs";
@@ -7,7 +7,6 @@ import { wordCount } from "./src/utils/word-count.mjs";
 // https://astro.build/config
 export default defineConfig({
   integrations: [
-    tailwind(),
     mdx({
       remarkPlugins: [
         () =>
@@ -24,8 +23,6 @@ export default defineConfig({
     assetsPrefix: "https://byk.im/",
   },
   vite: {
-    ssr: {
-      external: ["astro/container", "@astrojs/mdx"],
-    },
+    plugins: [tailwindcss()],
   },
 });

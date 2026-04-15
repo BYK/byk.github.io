@@ -1,6 +1,6 @@
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import mdxRenderer from "@astrojs/mdx/server.js";
-import { getCollection } from "astro:content";
+import { getCollection, render } from "astro:content";
 
 import rss from "@astrojs/rss";
 import { descDateSort } from "../utils/posts.mjs";
@@ -25,9 +25,12 @@ export async function GET(context) {
         title: post.data.title,
         pubDate: post.data.pubDate,
         description: post.data.intro,
-        link: new URL(`/posts/${post.slug}`, context.url.origin).toString(),
-        content: await container.renderToString((await post.render()).Content),
-      }))
+        link: new URL(
+          `/posts/${post.data.slug}`,
+          context.url.origin,
+        ).toString(),
+        content: await container.renderToString((await render(post)).Content),
+      })),
     ),
     customData: "<language>en-us</language>",
   });

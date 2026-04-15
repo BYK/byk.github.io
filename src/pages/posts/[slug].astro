@@ -8,20 +8,20 @@ import PublishDate from "../../components/posts/PublishDate.astro";
 import ReadingInfo from "../../components/posts/ReadingInfo.astro";
 import Tag from "../../components/general/Tag.astro";
 
-import { getCollection, getEntry } from "astro:content";
+import { getCollection, getEntry, render } from "astro:content";
 
 export async function getStaticPaths() {
   const blogEntries = await getCollection("posts");
 
   return blogEntries.map((entry) => ({
-    params: { slug: entry.slug },
+    params: { slug: entry.data.slug },
     props: { entry },
   }));
 }
 const { entry } = Astro.props;
 entry.data.type = "blog";
 
-const { Content, remarkPluginFrontmatter } = await entry.render();
+const { Content, remarkPluginFrontmatter } = await render(entry);
 const author = await getEntry(entry.data.author);
 
 ---
