@@ -31,6 +31,15 @@ const WELL_KNOWN_URL = new URL(
   "../public/.well-known/site.standard.publication",
   import.meta.url,
 );
+const DIST_URL = new URL("../dist/", import.meta.url);
+
+// Hard ceiling for image blobs (icon / coverImage). The lexicons declare
+// maxSize: 1000000 for both site.standard.publication#icon and
+// site.standard.document#coverImage; mirror it here (kept in sync with
+// MAX_BLOB_BYTES in src/lib/standard-site.ts). Anything larger is skipped, not
+// uploaded, so an oversized asset degrades to a record without a cover rather
+// than failing the write.
+const MAX_BLOB_BYTES = 1_000_000;
 
 function fail(message) {
   console.error(`✗ ${message}`);
@@ -58,6 +67,47 @@ async function xrpcPost(baseUrl, nsid, body, token) {
   });
   if (!res.ok) fail(`${nsid} -> ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+/**
+ * Upload raw image bytes as an AT Protocol blob and return the resulting blob
+ * ref (the `{$type:"blob", ref, mimeType, size}` object embedded into records).
+ */
+async function uploadBlob(pds, bytes, mimeType, token) {
+  const res = await fetch(new URL("/xrpc/com.atproto.repo.uploadBlob", pds), {
+    method: "POST",
+    headers: { "content-type": mimeType, authorization: `Bearer ${token}` },
+    body: bytes,
+  });
+  if (!res.ok)
+    fail(`com.atproto.repo.uploadBlob -> ${res.status}: ${await res.text()}`);
+  return (await res.json()).blob;
+}
+
+/**
+ * Read a manifest blob source from the build output and upload it, returning the
+ * blob ref. Best-effort: a missing or oversized file logs a warning and returns
+ * null so the record is still published — just without the image — rather than
+ * failing the whole run. (The bytes ship to AT Protocol exactly as built; the
+ * size cap mirrors the lexicon's 1 MB maxSize.)
+ */
+async function resolveBlob(source, token, pds) {
+  let bytes;
+  try {
+    bytes = await readFile(new URL(source.path, DIST_URL));
+  } catch {
+    console.warn(
+      `⚠ blob ${source.path} not found in dist/ — publishing record without it`,
+    );
+    return null;
+  }
+  if (bytes.length > MAX_BLOB_BYTES) {
+    console.warn(
+      `⚠ blob ${source.path} is ${bytes.length} bytes (> ${MAX_BLOB_BYTES} cap) — publishing record without it`,
+    );
+    return null;
+  }
+  return uploadBlob(pds, bytes, source.mimeType, token);
 }
 
 async function resolvePds(did) {
@@ -162,16 +212,38 @@ async function main() {
       rkey: manifest.publication.rkey,
       record: manifest.publication.record,
       uri: manifest.publication.uri,
+      // Publication icon: blob field is `icon`.
+      blobField: "icon",
+      blobSource: manifest.publication.icon,
     },
     ...manifest.documents.map((doc) => ({
       collection: doc.record.$type,
       rkey: doc.rkey,
       record: doc.record,
       uri: doc.uri,
+      // Document cover image: blob field is `coverImage`.
+      blobField: "coverImage",
+      blobSource: doc.coverImage,
     })),
   ];
 
-  for (const { collection, rkey, record, uri } of records) {
+  for (const {
+    collection,
+    rkey,
+    record,
+    uri,
+    blobField,
+    blobSource,
+  } of records) {
+    // Upload the image blob (if any) and attach its ref before writing the
+    // record, so the record and its blob land in a single putRecord. Blobs are
+    // content-addressed, so unchanged bytes yield the same ref and the upsert
+    // stays a no-op on re-runs; resolveBlob returns null (record published
+    // without the image) on a missing/oversized file rather than failing.
+    if (blobSource) {
+      const blob = await resolveBlob(blobSource, session.accessJwt, pds);
+      if (blob) record[blobField] = blob;
+    }
     // validate:false — the PDS does not host the site.standard.* lexicons, so
     // schema validation would reject otherwise-valid records.
     await xrpcPost(
@@ -180,7 +252,7 @@ async function main() {
       { repo: session.did, collection, rkey, record, validate: false },
       session.accessJwt,
     );
-    console.log(`✓ put ${uri}`);
+    console.log(`✓ put ${uri}${record[blobField] ? " (+image)" : ""}`);
   }
 
   // Prune document records with no matching post. Runs only after every current

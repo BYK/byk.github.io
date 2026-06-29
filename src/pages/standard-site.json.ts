@@ -1,7 +1,11 @@
 import mdxRenderer from "@astrojs/mdx/server.js";
+import { getImage } from "astro:assets";
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { getCollection, render } from "astro:content";
+import bykAvatar from "../assets/authors/byk.png";
 import {
+  assetUrlToDistPath,
+  type BlobSource,
   buildDocumentRecord,
   buildPublicationRecord,
   documentRkey,
@@ -9,6 +13,36 @@ import {
   PUBLICATION_RKEY,
   publicationUri,
 } from "../lib/standard-site";
+
+// The publication icon and per-document cover images are uploaded to the PDS as
+// AT Protocol blobs by the publish script. Blob refs can't be precomputed into
+// this static manifest (a ref only exists once the bytes are uploaded), so we
+// emit small, web-optimized variants here via `getImage()` and record their
+// build-output paths; the publish script reads those files, uploads them, and
+// attaches the returned ref. Variants are well under the lexicon's 1 MB cap
+// (and the post originals — e.g. a 5 MB PNG — would blow it, so we never ship
+// those raw).
+
+/** Square publication icon (lexicon wants square, >=256px). */
+async function buildIconSource(): Promise<BlobSource> {
+  const icon = await getImage({
+    src: bykAvatar,
+    width: 512,
+    height: 512,
+    fit: "cover",
+    format: "webp",
+  });
+  return { path: assetUrlToDistPath(icon.src), mimeType: "image/webp" };
+}
+
+/** Web-optimized cover image for a post, or undefined when it has no image. */
+async function buildCoverSource(
+  image: ImageMetadata | undefined,
+): Promise<BlobSource | undefined> {
+  if (!image) return undefined;
+  const cover = await getImage({ src: image, width: 1200, format: "webp" });
+  return { path: assetUrlToDistPath(cover.src), mimeType: "image/webp" };
+}
 
 // Build-time export of the standard.site records for the blog. The publish
 // script (scripts/publish-standard-site.mjs) reads this from dist/ and writes
@@ -75,7 +109,13 @@ export async function GET() {
         tags: post.data.tag ? [post.data.tag] : undefined,
         textContent: htmlToText(html),
       });
-      return { rkey: documentRkey(slug), uri: documentUri(slug), record };
+      const coverImage = await buildCoverSource(post.data.image);
+      return {
+        rkey: documentRkey(slug),
+        uri: documentUri(slug),
+        record,
+        ...(coverImage ? { coverImage } : {}),
+      };
     }),
   );
 
@@ -84,6 +124,7 @@ export async function GET() {
       rkey: PUBLICATION_RKEY,
       uri: publicationUri(),
       record: buildPublicationRecord(),
+      icon: await buildIconSource(),
     },
     documents,
   };
