@@ -80,6 +80,45 @@ export function documentPath(slug: string): string {
   return `/posts/${slug}/`;
 }
 
+/**
+ * Maximum size, in bytes, of an image blob (`icon` / `coverImage`).
+ *
+ * The `site.standard.publication#icon` and `site.standard.document#coverImage`
+ * fields both declare `maxSize: 1000000` in the lexicon. We generate small
+ * web-optimized variants well under this, but the publish script enforces it as
+ * a hard ceiling and skips (rather than uploads) anything larger so an oversized
+ * asset degrades to a record without a cover instead of a rejected write.
+ */
+export const MAX_BLOB_BYTES = 1_000_000;
+
+/**
+ * A blob to upload at publish time, described as a path relative to the build
+ * output (`dist/`) plus its MIME type. Blobs cannot live in the static manifest
+ * — an AT Protocol blob ref only exists once bytes are uploaded to the PDS — so
+ * the manifest points at the built file and `scripts/publish-standard-site.mjs`
+ * uploads it and attaches the returned ref to the record.
+ */
+export interface BlobSource {
+  /** Path to the image file relative to the build output directory (`dist/`). */
+  path: string;
+  /** MIME type to upload the blob as (e.g. `image/webp`). */
+  mimeType: string;
+}
+
+/**
+ * Reduce an asset URL produced by Astro's image pipeline to a path relative to
+ * the build output (`dist/`).
+ *
+ * With `build.assetsPrefix` set (this site uses `https://byk.im/`), `getImage()`
+ * returns an absolute URL like `https://byk.im/_astro/cover.hash.webp`; without
+ * it the URL is root-relative like `/_astro/cover.hash.webp`. Parsing against
+ * `SITE_URL` and taking the pathname normalizes both to `_astro/cover.hash.webp`,
+ * which is exactly where the file sits under `dist/`.
+ */
+export function assetUrlToDistPath(assetUrl: string): string {
+  return new URL(assetUrl, SITE_URL).pathname.replace(/^\/+/, "");
+}
+
 interface RgbColor {
   $type: "site.standard.theme.color#rgb";
   r: number;
