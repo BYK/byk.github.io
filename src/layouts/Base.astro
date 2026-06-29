@@ -3,9 +3,13 @@ import { ClientRouter } from 'astro:transitions';
 import SeoHead from "../components/general/SeoHead.astro"
 import Header from "../components/general/Header.astro"
 import Footer from "../components/general/Footer.astro"
+import { publicationUri, documentUri } from "../lib/standard-site"
 import '../css/style.css';
 
 const { postData } = Astro.props;
+// standard.site (https://standard.site): link every page to the publication and
+// each post to its document record so AT Protocol readers can resolve them.
+const postSlug = postData?.data?.slug;
 ---
 <!doctype html>
 <html lang="en">
@@ -44,6 +48,8 @@ const { postData } = Astro.props;
     <meta name="view-transition" content="same-origin" />
     <meta name="follow.it-verification-code" content="ztErNAHHpKlvFYurVBEd"/>
     <link rel="alternate" type="application/rss+xml" title="Read at BYK's" href={new URL("rss.xml", Astro.site)} />
+    <link rel="site.standard.publication" href={publicationUri()} />
+    {postSlug && <link rel="site.standard.document" href={documentUri(postSlug)} />}
     <SeoHead postData={postData} />
     <link rel="preload" href="/fonts/inter-v12-latin_latin-ext-regular.woff2" as="font" crossorigin>
     <link rel="preload" href="/fonts/inter-v12-latin_latin-ext-700.woff2" as="font" crossorigin>

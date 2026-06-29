@@ -1,0 +1,206 @@
+/**
+ * Standard.site (https://standard.site) AT Protocol integration for byk.im.
+ *
+ * The blog is modeled as a single `site.standard.publication` record plus one
+ * `site.standard.document` record per post, stored in the `@byk.im` Bluesky
+ * account's PDS.
+ *
+ * We use DETERMINISTIC record keys — the publication is `self`, each document
+ * uses its post slug — so the AT-URIs are predictable. That lets the on-page
+ * verification (`<link rel="site.standard.document">` and the `.well-known`
+ * endpoint) be generated at build time without first reading back what the PDS
+ * assigned, and makes publishing idempotent: `putRecord` upserts in place
+ * rather than creating duplicates on re-runs.
+ *
+ * The records themselves are materialized by `scripts/publish-standard-site.mjs`,
+ * which reads the build manifest emitted by `src/pages/standard-site.json.ts`.
+ *
+ * NOTE: this module is intentionally framework-free (no `astro:*` imports) so
+ * it can be imported from layouts/endpoints and from plain Node scripts alike.
+ *
+ * If you change `PUBLICATION_DID` or `PUBLICATION_RKEY`, also update the static
+ * verification file at `public/.well-known/site.standard.publication` (the
+ * publish script asserts the two stay in sync before writing any record).
+ */
+
+/** DID of the `@byk.im` Bluesky account (resolved from the handle). */
+export const PUBLICATION_DID = "did:plc:kl3s4yablm3fgnxfkn47uy5r";
+
+/** Record key of the singleton publication record. */
+export const PUBLICATION_RKEY = "self";
+
+/** Base URL combined with a document path to form its canonical URL. No trailing slash. */
+export const SITE_URL = "https://byk.im";
+
+export const PUBLICATION_NAME = "Read at BYK's";
+export const PUBLICATION_DESCRIPTION =
+  "Random ramblings of a software engineer. Mostly about software, sometimes about life.";
+
+const PUBLICATION_COLLECTION = "site.standard.publication";
+const DOCUMENT_COLLECTION = "site.standard.document";
+
+/** AT-URI of the publication record. */
+export function publicationUri(): string {
+  return `at://${PUBLICATION_DID}/${PUBLICATION_COLLECTION}/${PUBLICATION_RKEY}`;
+}
+
+/**
+ * AT Protocol record-key syntax: 1–512 chars from `[A-Za-z0-9._~:-]`, and never
+ * `.` or `..`. See https://atproto.com/specs/record-key.
+ */
+const RECORD_KEY_RE = /^[A-Za-z0-9._~:-]{1,512}$/;
+
+/**
+ * Documents are keyed by their post slug for stable, idempotent AT-URIs.
+ *
+ * A slug with `/` for nested directories, unicode letters, or other stray
+ * characters is illegal in a record key. Rather than silently mangle the slug
+ * (which would desync the on-page `<link>` from the published record), fail the
+ * build loudly so a problematic slug is a deliberate decision, not a broken
+ * AT-URI / rejected PDS write.
+ */
+export function documentRkey(slug: string): string {
+  if (!slug || slug === "." || slug === ".." || !RECORD_KEY_RE.test(slug)) {
+    throw new Error(
+      `Blog slug "${slug}" is not a valid AT Protocol record key ` +
+        "(allowed: 1–512 chars of A–Z a–z 0–9 . _ ~ : - ; not '.' or '..'). " +
+        "Fix the post's frontmatter `slug` or add an explicit mapping in standard-site.ts.",
+    );
+  }
+  return slug;
+}
+
+/** AT-URI of a document record. */
+export function documentUri(slug: string): string {
+  return `at://${PUBLICATION_DID}/${DOCUMENT_COLLECTION}/${documentRkey(slug)}`;
+}
+
+/** Site-relative path for a post; combined with `SITE_URL` to form its URL. */
+export function documentPath(slug: string): string {
+  return `/posts/${slug}/`;
+}
+
+interface RgbColor {
+  $type: "site.standard.theme.color#rgb";
+  r: number;
+  g: number;
+  b: number;
+}
+
+function rgb(r: number, g: number, b: number): RgbColor {
+  return { $type: "site.standard.theme.color#rgb", r, g, b };
+}
+
+// byk.im palette (see src/css/style.css): white surface, deep-blue ink, pink
+// accent. Mirrors the rendered blog so reader apps keep the site's identity.
+const BASIC_THEME = {
+  $type: "site.standard.theme.basic" as const,
+  background: rgb(255, 255, 255), // --color-pacamara-white #ffffff
+  foreground: rgb(0, 48, 73), // --color-pacamara-primary #003049
+  accent: rgb(255, 180, 180), // --color-pacamara-accent #ffb4b4
+  accentForeground: rgb(0, 14, 20), // --color-pacamara-dark #000e14
+};
+
+export interface PublicationRecord {
+  $type: "site.standard.publication";
+  url: string;
+  name: string;
+  description: string;
+  basicTheme: typeof BASIC_THEME;
+  preferences: { showInDiscover: boolean };
+}
+
+export function buildPublicationRecord(): PublicationRecord {
+  return {
+    $type: PUBLICATION_COLLECTION,
+    url: SITE_URL,
+    name: PUBLICATION_NAME,
+    description: PUBLICATION_DESCRIPTION,
+    basicTheme: BASIC_THEME,
+    preferences: { showInDiscover: true },
+  };
+}
+
+/**
+ * Upper bound on a document record's `textContent`, in UTF-8 bytes.
+ *
+ * `textContent` is supplementary — the canonical post lives on the site at the
+ * record's `path` — so it is safe to truncate. The AT Protocol repository spec
+ * delegates the hard maximum record size to PDS implementations rather than
+ * fixing a number (see https://atproto.com/specs/repository, "Security
+ * Considerations"), so we impose a conservative self-bound: generous enough
+ * that no realistic post is trimmed, while keeping records and firehose events
+ * from growing without limit.
+ */
+export const MAX_TEXT_CONTENT_BYTES = 64 * 1024;
+
+const TRUNCATION_MARKER = "\n[truncated]";
+
+/**
+ * Clamp `text` to at most `maxBytes` UTF-8 bytes for use as a record's
+ * `textContent`. Never splits a multi-byte code point, prefers a whitespace
+ * boundary so it does not cut mid-word, and appends a marker so consumers can
+ * tell the text was trimmed. The result is always <= `maxBytes` bytes.
+ */
+export function capTextContent(
+  text: string,
+  maxBytes = MAX_TEXT_CONTENT_BYTES,
+): string {
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(text);
+  if (encoded.length <= maxBytes) return text;
+
+  const budget = Math.max(
+    0,
+    maxBytes - encoder.encode(TRUNCATION_MARKER).length,
+  );
+  // Decode the byte-prefix; a trailing partial code point becomes U+FFFD, which
+  // we drop so the output is always valid UTF-8 within budget.
+  let head = new TextDecoder("utf-8").decode(encoded.subarray(0, budget));
+  if (head.endsWith("\uFFFD")) head = head.slice(0, -1);
+  // Back off to a whitespace boundary when one is close, so we cut between words
+  // rather than mid-word; keep the hard cut if the tail has no late whitespace
+  // (e.g. one enormous token) so we never collapse to near-empty.
+  const atBoundary = head.replace(/\S+$/, "").trimEnd();
+  if (atBoundary.length >= head.length * 0.8) head = atBoundary;
+  return `${head.trimEnd()}${TRUNCATION_MARKER}`;
+}
+
+export interface DocumentInput {
+  slug: string;
+  title: string;
+  description?: string;
+  /** ISO 8601 timestamp. */
+  publishedAt: string;
+  /** ISO 8601 timestamp. */
+  updatedAt?: string;
+  tags?: string[];
+  textContent?: string;
+}
+
+export interface DocumentRecord {
+  $type: "site.standard.document";
+  site: string;
+  path: string;
+  title: string;
+  publishedAt: string;
+  description?: string;
+  updatedAt?: string;
+  tags?: string[];
+  textContent?: string;
+}
+
+export function buildDocumentRecord(input: DocumentInput): DocumentRecord {
+  const record: DocumentRecord = {
+    $type: DOCUMENT_COLLECTION,
+    site: publicationUri(),
+    path: documentPath(input.slug),
+    title: input.title,
+    publishedAt: input.publishedAt,
+  };
+  if (input.description) record.description = input.description;
+  if (input.updatedAt) record.updatedAt = input.updatedAt;
+  if (input.tags && input.tags.length > 0) record.tags = input.tags;
+  if (input.textContent) record.textContent = capTextContent(input.textContent);
+  return record;
+}

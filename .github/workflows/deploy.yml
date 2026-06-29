@@ -14,6 +14,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Job-level so the publish step's `if` guard can read it (step-level env is
+    # not reliably available in that step's own `if`).
+    env:
+      BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
     steps:
       - name: Checkout your repository using git
         uses: actions/checkout@v4
@@ -21,6 +25,13 @@ jobs:
         uses: withastro/action@v3
         with:
           node-version: 22
+      # withastro/action leaves the built ./dist in the workspace; publish the
+      # standard.site (https://standard.site) records to the byk.im PDS from it.
+      # Skips when the secret is unset; a transient PDS outage never fails deploy.
+      - name: Publish standard.site records to the byk.im PDS
+        if: ${{ env.BSKY_APP_PASSWORD != '' }}
+        continue-on-error: true
+        run: node scripts/publish-standard-site.mjs
 
   deploy:
     needs: build
