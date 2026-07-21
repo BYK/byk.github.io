@@ -12,18 +12,18 @@
     "publish:standard-site": "node scripts/publish-standard-site.mjs"
   },
   "dependencies": {
-    "@astrojs/mdx": "^5.0.3",
+    "@astrojs/mdx": "^5.0.6",
     "@astrojs/rss": "4.0.18",
-    "@tailwindcss/typography": "^0.5.19",
-    "@tailwindcss/vite": "^4.2.2",
-    "astro": "^6.1.6",
+    "@tailwindcss/typography": "^0.5.20",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^6.4.8",
     "astro-icon": "^1.1.5",
     "dateformat": "^5.0.3",
     "sharp": "^0.34.5",
-    "tailwindcss": "^4.2.2"
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
-    "prettier": "^3.8.3",
+    "prettier": "^3.9.5",
     "prettier-plugin-astro": "^0.14.1"
   },
   "packageManager": "pnpm@10.28.0",
