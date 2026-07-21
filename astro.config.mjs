@@ -1,4 +1,5 @@
 import { defineConfig } from "astro/config";
+import { unified } from "@astrojs/markdown-remark";
 import tailwindcss from "@tailwindcss/vite";
 import mdx from "@astrojs/mdx";
 import icon from "astro-icon";
@@ -6,8 +7,9 @@ import { wordCount } from "./src/utils/word-count.mjs";
 
 // https://astro.build/config
 export default defineConfig({
-  integrations: [
-    mdx({
+  integrations: [mdx(), icon()],
+  markdown: {
+    processor: unified({
       remarkPlugins: [
         () =>
           (tree, { data }) => {
@@ -16,8 +18,7 @@ export default defineConfig({
           },
       ],
     }),
-    icon(),
-  ],
+  },
   site: "https://byk.im",
   build: {
     assetsPrefix: "https://byk.im/",
