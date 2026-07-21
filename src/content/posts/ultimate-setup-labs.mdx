@@ -1,0 +1,90 @@
+---
+pubDate: 2026-07-21
+author: byk
+tag: ai
+title: 'My ultimate setup: a £40 box that codes while I poop'
+intro: How a failed eBay router became an always-on home server running my coding agent, reachable from my phone anywhere thanks to Tailscale, and how it bootstrapped its own upgrades.
+slug: ultimate-setup-labs
+image: ../../assets/ultimate-setup-labs.png
+---
+
+At the end of my [last post][1] I promised you my ultimate setup. When "build on cloud" got takenth away from me and I was back to an angrily blowing laptop (and a wife complaining about the fan noise), anxiously checking my screen and swapping tabs, I decided to build my own version. It started at £40 and a great deal of dignity, and, as these things go, quietly grew from there. Let me explain.
+
+## A wild £40 box appears
+
+A while ago I bought a used [Dell OptiPlex 3050][2] off eBay for around £40. The plan was noble and boring: a basic home server that would also moonlight as my WiFi router. I was going to install [OpenWRT][3] on it, turn it into a proper access point, and feel very clever about it.
+
+Why OpenWRT? Because many years ago (almost 20, actually) I'd already tried building a WiFi AP on top of Ubuntu Server, and I hated my life. Back then getting a WiFi card into master mode under Linux meant wrestling with `iwconfig`, whatever half-working driver your chipset happened to have, and, if you were truly cursed, `ndiswrapper` to shim a Windows driver into the kernel because no native one existed. Just typing out `ndiswrapper` makes me anxious right now[^1]. So I (naively) assumed [OpenWRT][3] existed precisely to make that pain go away. It did not. If anything it was _worse_[^2]. After enough failed attempts I did what any self-respecting engineer does with a project that has defeated them: I put the box in a drawer and pretended it didn't exist.
+
+It sat there until we moved houses. The move quietly solved the original problem for me. I set up my actual, purpose-built router as the main router (thank god), and the little Dell was suddenly a solution in search of a problem. So I gave it a different job: [Ubuntu Server][4], no WiFi heroics, modest expectations. Just a small always-on Linux box.
+
+That, it turns out, was the whole trick. Drop the "it must also be my router" requirement and suddenly the £40 box is a perfectly good little Linux machine. It started life fairly humble, 8GB of RAM and a slightly pokey 128GB SSD[^3], but four cores of Intel i5-6500T is plenty for what I had in mind, and, most importantly, it never sleeps, nor does it try to melt its own casing or evaporate its thermal paste[^5].
+
+(The WiFi AP saga does get a happy ending, by the way, though not the one I expected[^4].)
+
+## Rediscovering the wheel (HTTP servers)
+
+For months I'd been running coding agents on my laptop, which meant keeping the lid cracked open around the clock so [Cursor][5] and friends could keep grinding away in the background. My poor laptop was basically a space heater with a keyboard.
+
+Once Ubuntu was humming on the OptiPlex, the penny dropped: [opencode][6] has a _server mode_. A web server mode. Which means I don't have to run my agent on the machine I'm sitting in front of. I can run it on the machine that _never sleeps_ and doesn't care about its fan curve. Move the agent off the hot laptop and onto the box that's designed to be on 24/7.
+
+So I did. And that alone would have been a nice win. But then came the part that got out of hand.
+
+## Everything everywhere all at once
+
+opencode's web mode gives you a UI in the browser. And the box was on my network. And I'd been wanting a proper excuse to put [Tailscale][7] on everything for ages, without ever finding one good enough to bother. Well. Here it was.
+
+You can see where this is going. If the box is on my tailnet, and the web UI is served over the tailnet, then I can drive my agent from _anything else on the tailnet_. Including the ridiculous foldable phone I mentioned [in the last post][1]. Which means I can kick off, review, and steer agents from anywhere with a signal.
+
+I will now confess the exact moment I knew this setup had won: I was checking in with my agent while 💩 instead of reading something random like a normal person[^6]. But it perfectly captures the vibe. The bottleneck was no longer "am I at my desk with my laptop plugged in," it was just "do I have my phone." And I always have my phone.
+
+## Wiring it up
+
+The technical spine is refreshingly boring, which is how you want infrastructure to be.
+
+opencode runs as a systemd service on the box so it comes up on boot and restarts if it dies. A proper daemon, not a `tmux` session I have to remember to babysit. It listens on `0.0.0.0:4096`.
+
+Tailscale does the reaching-from-anywhere part. Rather than a raw IP, I advertise it as a named service on the tailnet so it's just `opencode`, cleanly, from any device. There's one gotcha that cost me some time: re-authenticating the Tailscale node wipes the advertised services, so the service would silently vanish after an auth refresh. The fix is a small systemd timer that periodically re-asserts the advertisement, so if it ever gets dropped it heals itself within minutes. Set-and-forget, the way it should be.
+
+I also threw [Samba][8] on there so the box doubles as network storage, because if you have an always-on machine in the house you might as well.
+
+## The box that upgrades itself
+
+Now for my favorite part, the bit that still makes me grin. Once opencode was running _on_ labs, I could ask the agent to improve labs. And it did. From that little web UI, my agent has:
+
+- Finally solved the WiFi AP problem that had beaten me nearly twenty years earlier, standing up a dual-band access point so the office end of the flat gets a signal
+- Written an automatic brightness-matching service: a `light-match` daemon that reads a light sensor, pulls solar position and live cloud cover, and drives a smart dimmer (and a Bluetooth LED strip with weather-reactive animations, because why not) so my east-facing room stays at a comfortable indoor brightness all day. It even reverse-engineered the dimmer's undocumented Bluetooth RPC protocol to do it[^7]
+- Tightened up the box's security and tuned the server settings
+- Given me hardware upgrade advice (the eternal answer: moar RAM and a bigger SSD)
+- And then _performed the SSD migration itself_ when I bought the bigger drive
+
+Read that last one again. The agent, running on the machine, migrated the machine's own disk out from under itself. It's the closest a computer gets to a surgeon operating on their own open chest, calmly, while chatting to me about it.
+
+And because the stakes are gloriously low, I run the whole thing in full YOLO mode: auto-accept every permission, no prompts, no hand-holding. There's no production to nuke and no secrets worth stealing on there. The worst case is "the box falls over," and I can rebuild it from scratch in an afternoon[^8]. When the blast radius is one cheap Dell in the corner of a room, you can afford to let the robot cook.
+
+## Was it worth it?
+
+I replaced a cloud feature I didn't control with a used office PC I found for the price of a good GaN power brick. Well, £40 to start, but once it started advising me on its own upgrades I fed it more RAM and a bigger SSD (plus a better WiFi card, though that one was my idea), so realistically it's closer to £100 now. It doesn't save me a penny on the actual models, mind you, Sentry still pays Anthropic et al an obnoxious amount every month. But now I'm wringing every last drop out of that spend without cooking my own laptop to do it. It runs my agent, it's reachable from my phone anywhere on the planet[^9], and it has spent a non-trivial amount of its own uptime making itself better. The laptop fans are quiet again. The bottleneck is my planning, not my hardware or my location.
+
+Turns out the affliction is contagious. I managed to poison one innocent soul who took a look at all this, went off and built [Outpost][13], and now checks his phone like a flirty teenager ten times a minute while we're walking down the street. Sorry, Aditya. Not sorry.
+
+[^1]: For the record, `ndiswrapper` was a brilliant idea and probably a genuine engineering feat: load a Windows NDIS driver inside the Linux kernel so your unsupported card works. It just never once worked well _for me_. If you have ever tried to turn a random x86 box into a competent WiFi access point under Linux, you already know. If you haven't: cherish that.
+[^2]: I had assumed a purpose-built router OS would at least have _solved_ the driver problem. Instead it just moved the problem somewhere I understood even less.
+[^3]: The RAM and SSD both got upgraded later, on the box's own advice no less. More on that delightful recursion below.
+[^4]: The plot twist: I didn't crack it, the agent running on the box did. It handled all the fiddly `hostapd` setup and stood up a dual-band AP from _two_ separate cards, a MediaTek PCIe card for 5GHz and a cheap TP-Link USB adapter for 2.4GHz. If you've ever tried, you know USB WiFi adapters are notoriously awful in AP mode. Vindication, by proxy.
+[^5]: My _laptop_, on the other hand, currently couldn't evaporate its thermal paste even if it tried, because I replaced the paste with a phase-change thermal pad from [Thermal Grizzly][12] after consulting, yes, an AI. It worked wonders. The machines are now helping me keep the machines cool. I don't know how to feel about this.
+[^6]: I know, TMI, but in this case I had to share!
+[^7]: A £40 office PC on my toilet-time payroll reverse-engineered a smart dimmer's Bluetooth protocol so my living room could have nicer light. Not long ago I was actively hating on AI. How the turntables. Or, you know, the great love stories all start with a fight.
+[^8]: "At least I hope so" is doing a lot of load-bearing work in that sentence.
+[^9]: _Almost_ anywhere. More so if you have Starlink, which, no, I don't have yet.
+
+[1]: /posts/adaptation-new-tools-in-town
+[2]: https://www.dell.com/support/manuals/en-us/optiplex-3050-desktop/opti3050_om
+[3]: https://openwrt.org/
+[4]: https://ubuntu.com/server
+[5]: https://cursor.com/
+[6]: https://opencode.ai
+[7]: https://tailscale.com/
+[8]: https://www.samba.org/
+[12]: https://thermal-grizzly.com/en/
+[13]: https://github.com/MathurAditya724/outpost
