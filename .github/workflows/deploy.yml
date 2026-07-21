@@ -20,11 +20,9 @@ jobs:
       BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
     steps:
       - name: Checkout your repository using git
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install, build, and upload your site
-        uses: withastro/action@v3
-        with:
-          node-version: 22
+        uses: withastro/action@v6
       # withastro/action leaves the built ./dist in the workspace; publish the
       # standard.site (https://standard.site) records to the byk.im PDS from it.
       # Skips when the secret is unset; a transient PDS outage never fails deploy.
@@ -42,4 +40,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

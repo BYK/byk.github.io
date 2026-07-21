@@ -17,17 +17,6 @@ const postsCollection = defineCollection({
     }),
 });
 
-const pageCollection = defineCollection({
-  loader: glob({ pattern: "**/*.{md,mdx}", base: "./src/content/page" }),
-  schema: ({ image }) =>
-    z.object({
-      title: z.string(),
-      intro: z.string(),
-      image: image().optional(),
-      type: z.string().optional(),
-    }),
-});
-
 const authorCollection = defineCollection({
   loader: glob({ pattern: "**/*.json", base: "./src/content/author" }),
   schema: ({ image }) =>
@@ -41,5 +30,4 @@ const authorCollection = defineCollection({
 export const collections = {
   posts: postsCollection,
   author: authorCollection,
-  page: pageCollection,
 };
