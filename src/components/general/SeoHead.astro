@@ -13,6 +13,7 @@ const type = postData?.data?.type ? postData.data.type : "website";
 
 <title>{title}</title>
 <meta name="title" content={title} />
+{permalink && <link rel="canonical" href={permalink} />}
 {description && <meta name="description" content={description} />}
 
 <!-- Open Graph Tags (Facebook) -->
