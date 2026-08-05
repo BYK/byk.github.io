@@ -25,10 +25,9 @@ jobs:
         uses: withastro/action@v6
       # withastro/action leaves the built ./dist in the workspace; publish the
       # standard.site (https://standard.site) records to the byk.im PDS from it.
-      # Skips when the secret is unset; a transient PDS outage never fails deploy.
+      # Publishing must succeed before the site deploys so its document links
+      # never point at missing records.
       - name: Publish standard.site records to the byk.im PDS
-        if: ${{ env.BSKY_APP_PASSWORD != '' }}
-        continue-on-error: true
         run: node scripts/publish-standard-site.mjs
 
   deploy:

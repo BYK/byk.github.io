@@ -32,6 +32,8 @@ const WELL_KNOWN_URL = new URL(
   import.meta.url,
 );
 const DIST_URL = new URL("../dist/", import.meta.url);
+const FETCH_ATTEMPTS = 3;
+const FETCH_RETRY_DELAY_MS = 1_000;
 
 // Hard ceiling for image blobs (icon / coverImage). The lexicons declare
 // maxSize: 1000000 for both site.standard.publication#icon and
@@ -51,13 +53,13 @@ async function xrpcGet(baseUrl, nsid, query) {
   for (const [key, value] of Object.entries(query ?? {})) {
     url.searchParams.set(key, value);
   }
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) fail(`${nsid} -> ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
 async function xrpcPost(baseUrl, nsid, body, token) {
-  const res = await fetch(new URL(`/xrpc/${nsid}`, baseUrl), {
+  const res = await fetchWithRetry(new URL(`/xrpc/${nsid}`, baseUrl), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -69,16 +71,36 @@ async function xrpcPost(baseUrl, nsid, body, token) {
   return res.json();
 }
 
+async function fetchWithRetry(url, options) {
+  let lastError;
+  for (let attempt = 1; attempt <= FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt < FETCH_ATTEMPTS) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, FETCH_RETRY_DELAY_MS * attempt),
+        );
+      }
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Upload raw image bytes as an AT Protocol blob and return the resulting blob
  * ref (the `{$type:"blob", ref, mimeType, size}` object embedded into records).
  */
 async function uploadBlob(pds, bytes, mimeType, token) {
-  const res = await fetch(new URL("/xrpc/com.atproto.repo.uploadBlob", pds), {
-    method: "POST",
-    headers: { "content-type": mimeType, authorization: `Bearer ${token}` },
-    body: bytes,
-  });
+  const res = await fetchWithRetry(
+    new URL("/xrpc/com.atproto.repo.uploadBlob", pds),
+    {
+      method: "POST",
+      headers: { "content-type": mimeType, authorization: `Bearer ${token}` },
+      body: bytes,
+    },
+  );
   if (!res.ok)
     fail(`com.atproto.repo.uploadBlob -> ${res.status}: ${await res.text()}`);
   return (await res.json()).blob;
@@ -111,7 +133,7 @@ async function resolveBlob(source, token, pds) {
 }
 
 async function resolvePds(did) {
-  const res = await fetch(`https://plc.directory/${did}`);
+  const res = await fetchWithRetry(`https://plc.directory/${did}`);
   if (!res.ok) fail(`could not resolve DID document for ${did}: ${res.status}`);
   const doc = await res.json();
   const pds = (doc.service ?? []).find(
