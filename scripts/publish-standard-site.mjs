@@ -14,8 +14,8 @@
  * and never logged. BSKY_HANDLE defaults to "byk.im".
  *
  * Idempotent: records use deterministic rkeys (publication "self", documents =
- * post slug) written with putRecord, so re-running updates them in place rather
- * than creating duplicates. After upserting the current set, it prunes document
+ * a TID derived from the post slug) written with putRecord, so re-running updates
+ * them in place rather than creating duplicates. After upserting the current set, it prunes document
  * records that no longer have a matching post (deleted posts or renamed slugs)
  * so the PDS stays in sync with the published blog.
  */

@@ -119,6 +119,17 @@ export async function GET() {
     }),
   );
 
+  const rkeys = new Set<string>();
+  for (const document of documents) {
+    if (rkeys.has(document.rkey)) {
+      throw new Error(
+        `Duplicate standard.site document record key "${document.rkey}". ` +
+          "Change the key derivation before publishing.",
+      );
+    }
+    rkeys.add(document.rkey);
+  }
+
   const manifest = {
     publication: {
       rkey: PUBLICATION_RKEY,

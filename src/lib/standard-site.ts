@@ -6,7 +6,7 @@
  * account's PDS.
  *
  * We use DETERMINISTIC record keys — the publication is `self`, each document
- * uses its post slug — so the AT-URIs are predictable. That lets the on-page
+ * derives a TID from its post slug — so the AT-URIs are predictable. That lets the on-page
  * verification (`<link rel="site.standard.document">` and the `.well-known`
  * endpoint) be generated at build time without first reading back what the PDS
  * assigned, and makes publishing idempotent: `putRecord` upserts in place
@@ -44,30 +44,45 @@ export function publicationUri(): string {
   return `at://${PUBLICATION_DID}/${PUBLICATION_COLLECTION}/${PUBLICATION_RKEY}`;
 }
 
-/**
- * AT Protocol record-key syntax: 1–512 chars from `[A-Za-z0-9._~:-]`, and never
- * `.` or `..`. See https://atproto.com/specs/record-key.
- */
-const RECORD_KEY_RE = /^[A-Za-z0-9._~:-]{1,512}$/;
+const TID_ALPHABET = "234567abcdefghijklmnopqrstuvwxyz";
+const TID_MASK = (1n << 63n) - 1n;
+const TID_RE = /^[234567abcdefghij][234567abcdefghijklmnopqrstuvwxyz]{12}$/;
 
 /**
- * Documents are keyed by their post slug for stable, idempotent AT-URIs.
- *
- * A slug with `/` for nested directories, unicode letters, or other stray
- * characters is illegal in a record key. Rather than silently mangle the slug
- * (which would desync the on-page `<link>` from the published record), fail the
- * build loudly so a problematic slug is a deliberate decision, not a broken
- * AT-URI / rejected PDS write.
+ * Hash a slug into a valid TID. The hash is deliberately deterministic: the
+ * same post must resolve to the same AT-URI after every build. TIDs are 64-bit
+ * values encoded in sortable base32; keeping the top bit clear also guarantees
+ * that the first encoded character is in the valid TID range.
+ */
+function slugHash(slug: string): bigint {
+  let hash = 14695981039346656037n; // FNV-1a 64-bit offset basis
+  for (const byte of new TextEncoder().encode(slug)) {
+    hash ^= BigInt(byte);
+    hash = BigInt.asUintN(64, hash * 1099511628211n); // FNV-1a prime
+  }
+  return hash & TID_MASK;
+}
+
+/**
+ * Documents use a deterministic TID rather than the human-readable slug. The
+ * `site.standard.document` lexicon requires TID keys, unlike generic AT record
+ * keys. The slug remains the document path and therefore the canonical URL.
  */
 export function documentRkey(slug: string): string {
-  if (!slug || slug === "." || slug === ".." || !RECORD_KEY_RE.test(slug)) {
-    throw new Error(
-      `Blog slug "${slug}" is not a valid AT Protocol record key ` +
-        "(allowed: 1–512 chars of A–Z a–z 0–9 . _ ~ : - ; not '.' or '..'). " +
-        "Fix the post's frontmatter `slug` or add an explicit mapping in standard-site.ts.",
-    );
+  if (!slug) {
+    throw new Error("Cannot derive a standard.site document key from an empty slug.");
   }
-  return slug;
+
+  let value = slugHash(slug);
+  let rkey = "";
+  for (let index = 0; index < 13; index += 1) {
+    rkey = TID_ALPHABET[Number(value & 31n)] + rkey;
+    value >>= 5n;
+  }
+  if (!TID_RE.test(rkey)) {
+    throw new Error(`Derived invalid standard.site TID "${rkey}" for slug "${slug}".`);
+  }
+  return rkey;
 }
 
 /** AT-URI of a document record. */
