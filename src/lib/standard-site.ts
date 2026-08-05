@@ -26,8 +26,8 @@
 /** DID of the `@byk.im` Bluesky account (resolved from the handle). */
 export const PUBLICATION_DID = "did:plc:kl3s4yablm3fgnxfkn47uy5r";
 
-/** Record key of the singleton publication record. */
-export const PUBLICATION_RKEY = "self";
+/** Deterministic TID record key of the singleton publication record. */
+export const PUBLICATION_RKEY = "27wwoxjyk66jt";
 
 /** Base URL combined with a document path to form its canonical URL. No trailing slash. */
 export const SITE_URL = "https://byk.im";
